@@ -18,9 +18,12 @@ class Config:
     PROJECT_ROOT = Path(__file__).parent.parent
     DATA_DIR = PROJECT_ROOT / 'data'
     
-    # API Configuration
-    SKYSCANNER_API_KEY: Optional[str] = os.getenv('SKYSCANNER_API_KEY')
-    RAPIDAPI_KEY: Optional[str] = os.getenv('RAPIDAPI_KEY')
+    # API Configuration - Amadeus
+    AMADEUS_API_KEY: Optional[str] = os.getenv('AMADEUS_API_KEY')
+    AMADEUS_API_SECRET: Optional[str] = os.getenv('AMADEUS_API_SECRET')
+    
+    # Future: SerpApi for Google Flights
+    SERPAPI_KEY: Optional[str] = os.getenv('SERPAPI_KEY')
     
     # Rate limiting
     API_CALLS_PER_MINUTE: int = int(os.getenv('API_CALLS_PER_MINUTE', '10'))

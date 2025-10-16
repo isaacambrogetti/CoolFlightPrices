@@ -126,9 +126,11 @@ def date_range_search_ui(sidebar):
                 key="dep_start"
             )
         with col2:
+            # Ensure dep_end default is valid
+            safe_dep_end = max(default_dep_end, dep_start)
             dep_end = st.date_input(
                 "Latest",
-                value=default_dep_end,
+                value=safe_dep_end,
                 min_value=dep_start,
                 help="Latest you can depart",
                 key="dep_end"
@@ -137,34 +139,72 @@ def date_range_search_ui(sidebar):
         st.markdown("### 🔙 Return Date Range")
         col1, col2 = st.columns(2)
         
-        default_ret_start = default_dep_end + timedelta(days=3)
+        # Calculate safe defaults for return dates
+        min_ret_date = dep_start + timedelta(days=1)
+        default_ret_start = max(dep_end + timedelta(days=3), min_ret_date)
         default_ret_end = default_ret_start + timedelta(days=4)
         
         with col1:
+            # Ensure ret_start default is valid
+            safe_ret_start = max(default_ret_start, min_ret_date)
             ret_start = st.date_input(
                 "Earliest",
-                value=default_ret_start,
-                min_value=dep_start + timedelta(days=1),
+                value=safe_ret_start,
+                min_value=min_ret_date,
                 help="Earliest you can return",
                 key="ret_start"
             )
         with col2:
+            # Ensure ret_end default is valid
+            safe_ret_end = max(default_ret_end, ret_start)
             ret_end = st.date_input(
                 "Latest",
-                value=default_ret_end,
+                value=safe_ret_end,
                 min_value=ret_start,
                 help="Latest you can return",
                 key="ret_end"
             )
         
-        # Minimum days at destination
-        min_days = st.slider(
-            "Minimum full days at destination",
-            min_value=0,
-            max_value=14,
-            value=2,
-            help="Minimum complete days you want to spend at destination (arrival/departure days don't count)"
+        # Trip duration preferences
+        st.markdown("### ⏱️ Trip Duration")
+        duration_mode = st.radio(
+            "Vacation Length Strategy",
+            options=["Flexible (any duration)", "Fixed duration", "Maximum days possible"],
+            help="""
+            - **Flexible**: Any trip length between selected dates
+            - **Fixed**: Exact number of days (e.g., exactly 7 days)
+            - **Maximum**: Prioritize longest possible stays
+            """
         )
+        
+        if duration_mode == "Fixed duration":
+            fixed_days = st.number_input(
+                "Trip duration (days)",
+                min_value=2,
+                max_value=30,
+                value=7,
+                help="Total trip duration including departure and return days"
+            )
+            min_days = fixed_days - 1  # Convert to days at destination
+            max_days = fixed_days - 1
+        elif duration_mode == "Maximum days possible":
+            min_days = st.slider(
+                "Minimum trip length (days at destination)",
+                min_value=1,
+                max_value=14,
+                value=5,
+                help="Search for longest possible stays above this minimum"
+            )
+            max_days = None  # Will prioritize longest
+        else:  # Flexible
+            min_days = st.slider(
+                "Minimum full days at destination",
+                min_value=0,
+                max_value=14,
+                value=2,
+                help="Minimum complete days you want to spend at destination"
+            )
+            max_days = None
         
         # Passengers
         adults = st.number_input(
@@ -177,7 +217,7 @@ def date_range_search_ui(sidebar):
         
         # Calculate combinations
         try:
-            stats = estimate_api_calls(dep_start, dep_end, ret_start, ret_end, min_days)
+            stats = estimate_api_calls(dep_start, dep_end, ret_start, ret_end, min_days, max_days)
             num_combinations = stats['total_combinations']
             
             st.info(f"""
@@ -212,9 +252,75 @@ def date_range_search_ui(sidebar):
         'ret_start': ret_start,
         'ret_end': ret_end,
         'min_days': min_days,
+        'max_days': max_days if duration_mode == "Fixed duration" else None,
+        'duration_mode': duration_mode,
         'adults': adults,
         'use_sampling': use_sampling if num_combinations > 50 else False
     }
+
+
+def filter_flights_by_time(flights, dep_min_hour=None, dep_max_hour=None, arr_min_hour=None, arr_max_hour=None):
+    """
+    Filter flights by departure and arrival times.
+    
+    Args:
+        flights: List of flight dictionaries
+        dep_min_hour: Minimum departure hour (0-23), None for no limit
+        dep_max_hour: Maximum departure hour (0-23), None for no limit  
+        arr_min_hour: Minimum arrival hour (0-23), None for no limit
+        arr_max_hour: Maximum arrival hour (0-23), None for no limit
+    
+    Returns:
+        Filtered list of flights
+    """
+    if not any([dep_min_hour, dep_max_hour, arr_min_hour, arr_max_hour]):
+        return flights
+    
+    filtered = []
+    for flight in flights:
+        # Check outbound departure time
+        if dep_min_hour is not None or dep_max_hour is not None:
+            dep_time_str = flight['outbound']['departure_time']
+            dep_hour = int(dep_time_str.split(':')[0])
+            
+            if dep_min_hour is not None and dep_hour < dep_min_hour:
+                continue
+            if dep_max_hour is not None and dep_hour > dep_max_hour:
+                continue
+        
+        # Check outbound arrival time
+        if arr_min_hour is not None or arr_max_hour is not None:
+            arr_time_str = flight['outbound']['arrival_time']
+            arr_hour = int(arr_time_str.split(':')[0])
+            
+            if arr_min_hour is not None and arr_hour < arr_min_hour:
+                continue
+            if arr_max_hour is not None and arr_hour > arr_max_hour:
+                continue
+        
+        # Also check return flight times if it exists
+        if flight.get('return'):
+            if dep_min_hour is not None or dep_max_hour is not None:
+                ret_dep_time_str = flight['return']['departure_time']
+                ret_dep_hour = int(ret_dep_time_str.split(':')[0])
+                
+                if dep_min_hour is not None and ret_dep_hour < dep_min_hour:
+                    continue
+                if dep_max_hour is not None and ret_dep_hour > dep_max_hour:
+                    continue
+            
+            if arr_min_hour is not None or arr_max_hour is not None:
+                ret_arr_time_str = flight['return']['arrival_time']
+                ret_arr_hour = int(ret_arr_time_str.split(':')[0])
+                
+                if arr_min_hour is not None and ret_arr_hour < arr_min_hour:
+                    continue
+                if arr_max_hour is not None and ret_arr_hour > arr_max_hour:
+                    continue
+        
+        filtered.append(flight)
+    
+    return filtered
 
 
 def display_single_search_results(flights, origin, destination):
@@ -224,6 +330,53 @@ def display_single_search_results(flights, origin, destination):
         return
     
     st.success(f"✅ Found {len(flights)} flight options!")
+    
+    # Time filtering controls
+    with st.expander("⏰ Filter by Departure/Arrival Times", expanded=False):
+        st.markdown("*Exclude flights that depart too early or arrive too late*")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("**Departure Time**")
+            filter_dep = st.checkbox("Filter departure times", key="filter_dep_single")
+            if filter_dep:
+                dep_time_range = st.slider(
+                    "Acceptable departure hours",
+                    min_value=0,
+                    max_value=23,
+                    value=(6, 22),
+                    help="Flights departing between these hours",
+                    key="dep_range_single"
+                )
+                dep_min_hour, dep_max_hour = dep_time_range
+            else:
+                dep_min_hour, dep_max_hour = None, None
+        
+        with col2:
+            st.markdown("**Arrival Time**")
+            filter_arr = st.checkbox("Filter arrival times", key="filter_arr_single")
+            if filter_arr:
+                arr_time_range = st.slider(
+                    "Acceptable arrival hours",
+                    min_value=0,
+                    max_value=23,
+                    value=(6, 23),
+                    help="Flights arriving between these hours",
+                    key="arr_range_single"
+                )
+                arr_min_hour, arr_max_hour = arr_time_range
+            else:
+                arr_min_hour, arr_max_hour = None, None
+    
+    # Apply time filters
+    if any([dep_min_hour, dep_max_hour, arr_min_hour, arr_max_hour]):
+        original_count = len(flights)
+        flights = filter_flights_by_time(flights, dep_min_hour, dep_max_hour, arr_min_hour, arr_max_hour)
+        if len(flights) < original_count:
+            st.info(f"🔍 Filtered to {len(flights)} flights (removed {original_count - len(flights)} outside time preferences)")
+        if not flights:
+            st.warning("No flights match your time preferences. Try adjusting the filters.")
+            return
     
     # Display flights
     for i, flight in enumerate(flights, 1):
@@ -265,7 +418,7 @@ def display_single_search_results(flights, origin, destination):
             st.markdown(f"**Seats Available:** {flight['number_of_bookable_seats']}")
 
 
-def display_date_range_results(results, origin, destination):
+def display_date_range_results(results, origin, destination, duration_mode=None):
     """Display results for date range search with visualizations"""
     # Statistics
     stats = BatchFlightSearch(AmadeusClient()).get_statistics(results)
@@ -282,9 +435,90 @@ def display_date_range_results(results, origin, destination):
         if stats['avg_price']:
             st.metric("Average", f"{stats['currency']} {stats['avg_price']:.2f}")
     
+    # Time filtering controls
+    with st.expander("⏰ Filter Results by Flight Times", expanded=False):
+        st.markdown("*Refine results to exclude inconvenient flight times*")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("**Departure Time**")
+            filter_dep = st.checkbox("Filter departure times", key="filter_dep_range")
+            if filter_dep:
+                dep_time_range = st.slider(
+                    "Acceptable departure hours",
+                    min_value=0,
+                    max_value=23,
+                    value=(6, 22),
+                    help="Only show flights departing between these hours",
+                    key="dep_range_flex"
+                )
+                dep_min_hour, dep_max_hour = dep_time_range
+            else:
+                dep_min_hour, dep_max_hour = None, None
+        
+        with col2:
+            st.markdown("**Arrival Time**")
+            filter_arr = st.checkbox("Filter arrival times", key="filter_arr_range")
+            if filter_arr:
+                arr_time_range = st.slider(
+                    "Acceptable arrival hours",
+                    min_value=0,
+                    max_value=23,
+                    value=(6, 23),
+                    help="Only show flights arriving between these hours",
+                    key="arr_range_flex"
+                )
+                arr_min_hour, arr_max_hour = arr_time_range
+            else:
+                arr_min_hour, arr_max_hour = None, None
+    
+    # Apply time filters to results
+    if any([dep_min_hour, dep_max_hour, arr_min_hour, arr_max_hour]):
+        filtered_results = []
+        for result in results:
+            if result.success and result.all_flights:
+                # Filter flights within this date combination
+                filtered_flights = filter_flights_by_time(
+                    result.all_flights, 
+                    dep_min_hour, dep_max_hour, 
+                    arr_min_hour, arr_max_hour
+                )
+                if filtered_flights:
+                    # Update result with filtered flights and recalculate cheapest
+                    result.all_flights = filtered_flights
+                    result.cheapest_price = min(f['price'] for f in filtered_flights)
+                    result.cheapest_flight = min(filtered_flights, key=lambda f: f['price'])
+                    filtered_results.append(result)
+        
+        if len(filtered_results) < len([r for r in results if r.success]):
+            original_count = len([r for r in results if r.success])
+            st.info(f"🔍 Time filter applied: {len(filtered_results)} of {original_count} date combinations still have available flights")
+        
+        results = filtered_results
+        
+        if not results:
+            st.warning("No flights match your time preferences. Try adjusting the filters.")
+            return
+        
+        # Recalculate statistics with filtered results
+        stats = BatchFlightSearch(AmadeusClient()).get_statistics(results)
+    
     # Best deals
     st.subheader("🏆 Best Deals")
-    best_deals = [r for r in results if r.success and r.cheapest_price is not None][:5]
+    
+    # Filter successful results
+    successful_results = [r for r in results if r.success and r.cheapest_price is not None]
+    
+    # Sort based on duration mode
+    if duration_mode == "Maximum days possible":
+        # Sort by duration (longest first), then by price
+        best_deals = sorted(successful_results, 
+                           key=lambda r: (-r.total_duration, r.cheapest_price))[:5]
+        st.info("📏 Showing longest stays with best prices")
+    else:
+        # Sort by price (cheapest first)
+        best_deals = sorted(successful_results, 
+                           key=lambda r: r.cheapest_price)[:5]
     
     for i, result in enumerate(best_deals, 1):
         with st.expander(
@@ -428,16 +662,22 @@ def main():
                         params['dep_start'], params['dep_end'],
                         params['ret_start'], params['ret_end'],
                         target_combinations=25,
-                        min_days_at_destination=params['min_days']
+                        min_days_at_destination=params['min_days'],
+                        max_days_at_destination=params.get('max_days')
                     )
                 else:
                     combinations = generate_date_combinations(
                         params['dep_start'], params['dep_end'],
                         params['ret_start'], params['ret_end'],
-                        params['min_days']
+                        params['min_days'],
+                        params.get('max_days')
                     )
                 
                 st.info(f"Searching {len(combinations)} date combinations...")
+                
+                # For maximum days mode, add info about strategy
+                if params.get('duration_mode') == "Maximum days possible":
+                    st.info("🎯 Prioritizing longest possible stays in results...")
                 
                 # Batch search with progress
                 batch_search = BatchFlightSearch(client)
@@ -460,7 +700,7 @@ def main():
                 status_text.empty()
                 
                 # Display results
-                display_date_range_results(results, origin, destination)
+                display_date_range_results(results, origin, destination, params.get('duration_mode'))
                 
             else:
                 # Single date search

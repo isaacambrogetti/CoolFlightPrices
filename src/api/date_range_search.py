@@ -40,6 +40,7 @@ def generate_date_combinations(
     return_start: date,
     return_end: date,
     min_days_at_destination: int = 0,
+    max_days_at_destination: int = None,
     max_combinations: int = None
 ) -> List[DateCombination]:
     """
@@ -51,6 +52,7 @@ def generate_date_combinations(
         return_start: Earliest possible return date
         return_end: Latest possible return date
         min_days_at_destination: Minimum full days required at destination
+        max_days_at_destination: Maximum full days at destination (None = no limit)
         max_combinations: Maximum number of combinations to generate (None = no limit)
         
     Returns:
@@ -93,15 +95,23 @@ def generate_date_combinations(
             days_at_dest = (current_ret - current_dep).days - 1
             
             # Check minimum stay requirement
-            if days_at_dest >= min_days_at_destination:
-                combinations.append(DateCombination(
-                    departure=current_dep,
-                    return_date=current_ret
-                ))
-                
-                # Check max combinations limit
-                if max_combinations and len(combinations) >= max_combinations:
-                    return combinations
+            if days_at_dest < min_days_at_destination:
+                current_ret += timedelta(days=1)
+                continue
+            
+            # Check maximum stay requirement (for fixed duration mode)
+            if max_days_at_destination is not None and days_at_dest > max_days_at_destination:
+                current_ret += timedelta(days=1)
+                continue
+            
+            combinations.append(DateCombination(
+                departure=current_dep,
+                return_date=current_ret
+            ))
+            
+            # Check max combinations limit
+            if max_combinations and len(combinations) >= max_combinations:
+                return combinations
             
             current_ret += timedelta(days=1)
         current_dep += timedelta(days=1)
@@ -114,7 +124,8 @@ def estimate_api_calls(
     departure_end: date,
     return_start: date,
     return_end: date,
-    min_days_at_destination: int = 0
+    min_days_at_destination: int = 0,
+    max_days_at_destination: int = None
 ) -> dict:
     """
     Estimate number of API calls and provide statistics.
@@ -134,7 +145,8 @@ def estimate_api_calls(
     combinations = generate_date_combinations(
         departure_start, departure_end,
         return_start, return_end,
-        min_days_at_destination
+        min_days_at_destination,
+        max_days_at_destination
     )
     
     return {
@@ -144,15 +156,14 @@ def estimate_api_calls(
         'max_possible': max_possible,
         'filtered_out': max_possible - len(combinations)
     }
-
-
 def smart_sample_dates(
     departure_start: date,
     departure_end: date,
     return_start: date,
     return_end: date,
     target_combinations: int = 20,
-    min_days_at_destination: int = 0
+    min_days_at_destination: int = 0,
+    max_days_at_destination: int = None
 ) -> List[DateCombination]:
     """
     Intelligently sample date combinations when there are too many.
@@ -160,13 +171,14 @@ def smart_sample_dates(
     Strategy:
     - Always include first and last dates in each range
     - Sample evenly distributed dates in between
-    - Respect minimum stay requirement
+    - Respect minimum/maximum stay requirements
     
     Args:
         departure_start, departure_end: Departure date range
         return_start, return_end: Return date range
         target_combinations: Desired number of combinations (~20 is good)
         min_days_at_destination: Minimum days at destination
+        max_days_at_destination: Maximum days at destination (None = no limit)
         
     Returns:
         List of sampled DateCombination objects
@@ -184,7 +196,8 @@ def smart_sample_dates(
         return generate_date_combinations(
             departure_start, departure_end,
             return_start, return_end,
-            min_days_at_destination
+            min_days_at_destination,
+            max_days_at_destination
         )
     
     # Calculate optimal step size
@@ -216,9 +229,12 @@ def smart_sample_dates(
             if ret > dep:
                 days_at_dest = (ret - dep).days - 1
                 if days_at_dest >= min_days_at_destination:
-                    combinations.append(DateCombination(
-                        departure=dep,
-                        return_date=ret
-                    ))
+                    if max_days_at_destination is None or days_at_dest <= max_days_at_destination:
+                        combinations.append(DateCombination(
+                            departure=dep,
+                            return_date=ret
+                        ))
+    
+    return combinations
     
     return combinations

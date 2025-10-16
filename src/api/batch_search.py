@@ -37,6 +37,10 @@ class SearchResult:
     error: Optional[str] = None
     success: bool = True
     
+    # Airport route info (optional, for multi-airport searches)
+    origin: Optional[str] = None
+    destination: Optional[str] = None
+    
     def to_dict(self):
         """Convert to dictionary for easy serialization"""
         result = asdict(self)

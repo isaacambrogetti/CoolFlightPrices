@@ -459,10 +459,72 @@ def display_single_search_results(flights, origin, destination):
             st.markdown(f"**Seats Available:** {flight['number_of_bookable_seats']}")
 
 
+def display_multi_airport_results(flights, airport_routes):
+    """Display results for single date search with multiple airports"""
+    if not flights:
+        st.warning("No flights found for any route. Try different dates or airports.")
+        return
+    
+    st.success(f"✅ Found {len(flights)} flight options across {len(airport_routes)} routes!")
+    
+    # Group flights by route for easy comparison
+    route_counts = {}
+    for flight in flights:
+        route = flight.get('search_route', 'Unknown')
+        route_counts[route] = route_counts.get(route, 0) + 1
+    
+    # Show route summary
+    st.info(f"🛫 Results per route: {', '.join([f'{route}: {count}' for route, count in sorted(route_counts.items())])}")
+    
+    # Display flights
+    for i, flight in enumerate(flights, 1):
+        route = flight.get('search_route', 'Unknown')
+        
+        with st.expander(
+            f"💰 {flight['currency']} {flight['price']:.2f} - [{route}] "
+            f"{flight['outbound']['airline']} {flight['outbound']['flight_number']}"
+            f"{' (Cheapest!)' if i == 1 else ''}",
+            expanded=(i <= 3)
+        ):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**✈️ Outbound Flight**")
+                outbound = flight['outbound']
+                st.markdown(f"""
+                - **Route:** {outbound['origin']} → {outbound['destination']}
+                - **Date:** {outbound['departure_date']}
+                - **Departure:** {outbound['departure_time']}
+                - **Arrival:** {outbound['arrival_time']}
+                - **Airline:** {outbound['airline']} {outbound['flight_number']}
+                - **Stops:** {outbound['stops']}
+                - **Duration:** {outbound['duration']}
+                """)
+            
+            if flight['return']:
+                with col2:
+                    st.markdown("**🔙 Return Flight**")
+                    return_flight = flight['return']
+                    st.markdown(f"""
+                    - **Route:** {return_flight['origin']} → {return_flight['destination']}
+                    - **Date:** {return_flight['departure_date']}
+                    - **Departure:** {return_flight['departure_time']}
+                    - **Arrival:** {return_flight['arrival_time']}
+                    - **Airline:** {return_flight['airline']} {return_flight['flight_number']}
+                    - **Stops:** {return_flight['stops']}
+                    - **Duration:** {return_flight['duration']}
+                    """)
+            
+            st.markdown(f"**Seats Available:** {flight['number_of_bookable_seats']}")
+
+
 def display_date_range_results(results, origin, destination, duration_mode=None):
-    """Display results for date range search with visualizations"""
+    """Display results for date range search with visualizations (supports multi-airport)"""
     # Statistics
     stats = BatchFlightSearch(AmadeusClient()).get_statistics(results)
+    
+    # Check if this is multi-airport search
+    is_multi_airport = any(r.origin or r.destination for r in results)
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -494,10 +556,13 @@ def display_date_range_results(results, origin, destination, duration_mode=None)
                            key=lambda r: r.cheapest_price)[:5]
     
     for i, result in enumerate(best_deals, 1):
+        # Show route info for multi-airport searches
+        route_info = f" [{result.origin}→{result.destination}]" if is_multi_airport and result.origin else ""
+        
         with st.expander(
             f"#{i}: {result.currency} {result.cheapest_price:.2f} - "
             f"{result.departure_date.strftime('%b %d')} → {result.return_date.strftime('%b %d')} "
-            f"({result.total_duration} days)",
+            f"({result.total_duration} days){route_info}",
             expanded=(i <= 2)
         ):
             col1, col2 = st.columns([1, 2])
@@ -508,6 +573,7 @@ def display_date_range_results(results, origin, destination, duration_mode=None)
                 - Return: {result.return_date.strftime('%A, %B %d')}
                 - Days at destination: {result.days_at_destination}
                 - Total duration: {result.total_duration} days
+                {f"- Route: {result.origin} → {result.destination}" if is_multi_airport and result.origin else ""}
                 """)
             
             with col2:
@@ -601,21 +667,60 @@ def main():
     
     # Origin and destination (common for both modes)
     with st.sidebar:
+        st.markdown("### 🛫 Airports")
+        
+        # Multi-airport toggle
+        multi_airport = st.checkbox(
+            "Compare multiple airports",
+            value=False,
+            help="Search multiple origin and/or destination airports to find the best deal"
+        )
+        
         col1, col2 = st.columns(2)
         with col1:
-            origin = st.text_input(
-                "From",
-                value="ZRH",
-                max_chars=3,
-                help="3-letter IATA airport code"
-            ).upper()
+            if multi_airport:
+                origin_input = st.text_area(
+                    "From (comma-separated)",
+                    value="ZRH",
+                    height=80,
+                    help="Enter multiple 3-letter IATA airport codes separated by commas (e.g., ZRH, GVA, BSL)"
+                ).upper()
+                origins = [code.strip() for code in origin_input.split(',') if code.strip()]
+            else:
+                origin = st.text_input(
+                    "From",
+                    value="ZRH",
+                    max_chars=3,
+                    help="3-letter IATA airport code"
+                ).upper()
+                origins = [origin] if origin else []
+                
         with col2:
-            destination = st.text_input(
-                "To",
-                value="LIS",
-                max_chars=3,
-                help="3-letter IATA airport code"
-            ).upper()
+            if multi_airport:
+                destination_input = st.text_area(
+                    "To (comma-separated)",
+                    value="LIS",
+                    height=80,
+                    help="Enter multiple 3-letter IATA airport codes separated by commas (e.g., LIS, OPO, FAO)"
+                ).upper()
+                destinations = [code.strip() for code in destination_input.split(',') if code.strip()]
+            else:
+                destination = st.text_input(
+                    "To",
+                    value="LIS",
+                    max_chars=3,
+                    help="3-letter IATA airport code"
+                ).upper()
+                destinations = [destination] if destination else []
+        
+        # Show airport combination count
+        if multi_airport and origins and destinations:
+            num_combinations = len(origins) * len(destinations)
+            if num_combinations > 1:
+                st.info(f"🔄 Will search {num_combinations} airport combination{'s' if num_combinations > 1 else ''}: "
+                       f"{len(origins)} origin × {len(destinations)} destination")
+                if num_combinations > 10:
+                    st.warning("⚠️ Searching many airports will use more API calls and take longer!")
     
     # Mode-specific UI
     if search_mode == "💡 Flexible Dates (Date Range)":
@@ -630,20 +735,39 @@ def main():
     # Main content area
     if search_button:
         # Validate inputs
-        if not origin or len(origin) != 3:
-            st.error("Please enter a valid 3-letter origin airport code")
+        if not origins:
+            st.error("Please enter at least one origin airport code")
             st.stop()
         
-        if not destination or len(destination) != 3:
-            st.error("Please enter a valid 3-letter destination airport code")
+        if not destinations:
+            st.error("Please enter at least one destination airport code")
             st.stop()
+        
+        # Validate all airport codes
+        invalid_origins = [code for code in origins if len(code) != 3]
+        invalid_destinations = [code for code in destinations if len(code) != 3]
+        
+        if invalid_origins:
+            st.error(f"Invalid origin airport codes (must be 3 letters): {', '.join(invalid_origins)}")
+            st.stop()
+        
+        if invalid_destinations:
+            st.error(f"Invalid destination airport codes (must be 3 letters): {', '.join(invalid_destinations)}")
+            st.stop()
+        
+        # Create airport route combinations
+        airport_routes = [(orig, dest) for orig in origins for dest in destinations]
         
         try:
             client = AmadeusClient()
             
             if search_mode == "💡 Flexible Dates (Date Range)":
-                # Date range search
-                st.subheader(f"📊 Flexible Date Search: {origin} → {destination}")
+                # Date range search with multiple airports
+                if len(airport_routes) == 1:
+                    st.subheader(f"📊 Flexible Date Search: {origins[0]} → {destinations[0]}")
+                else:
+                    st.subheader(f"📊 Flexible Date Search: {len(origins)} origin(s) × {len(destinations)} destination(s)")
+                    st.caption(f"Comparing: {', '.join([f'{o}→{d}' for o, d in airport_routes])}")
                 
                 # Generate date combinations
                 if params['use_sampling']:
@@ -663,7 +787,11 @@ def main():
                         params.get('max_days')
                     )
                 
-                st.info(f"Searching {len(combinations)} date combinations...")
+                total_searches = len(combinations) * len(airport_routes)
+                st.info(f"Searching {len(combinations)} date combinations × {len(airport_routes)} airport route(s) = {total_searches} total searches")
+                
+                if total_searches > 100:
+                    st.warning("⚠️ This will make many API calls and may take several minutes. Consider enabling 'Use Smart Sampling' to reduce calls.")
                 
                 # Show time filter info if applied
                 if any([params.get('dep_min_hour'), params.get('dep_max_hour'), params.get('arr_min_hour'), params.get('arr_max_hour')]):
@@ -678,22 +806,42 @@ def main():
                 if params.get('duration_mode') == "Maximum days possible":
                     st.info("🎯 Prioritizing longest possible stays in results...")
                 
-                # Batch search with progress
+                # Batch search with progress for all airport combinations
                 batch_search = BatchFlightSearch(client)
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 
-                def update_progress(current, total, message):
-                    progress_bar.progress(current / total)
-                    status_text.text(f"{message} ({current}/{total})")
+                all_results = []
                 
-                results = batch_search.search_date_range(
-                    origin=origin,
-                    destination=destination,
-                    date_combinations=combinations,
-                    adults=params['adults'],
-                    progress_callback=update_progress
-                )
+                for route_idx, (origin, destination) in enumerate(airport_routes):
+                    route_label = f"{origin}→{destination}"
+                    
+                    def update_progress(current, total, message):
+                        overall_progress = (route_idx * len(combinations) + current) / total_searches
+                        progress_bar.progress(overall_progress)
+                        status_text.text(f"[{route_label}] {message} ({route_idx + 1}/{len(airport_routes)} routes)")
+                    
+                    results = batch_search.search_date_range(
+                        origin=origin,
+                        destination=destination,
+                        date_combinations=combinations,
+                        adults=params['adults'],
+                        progress_callback=update_progress
+                    )
+                    
+                    # Add route info to each result
+                    for result in results:
+                        result.origin = origin
+                        result.destination = destination
+                    
+                    all_results.extend(results)
+                
+                progress_bar.progress(1.0)
+                status_text.text(f"✅ Completed all {len(airport_routes)} routes!")
+                
+                if not all_results:
+                    st.warning("No flights found for any route/date combination. Try different criteria.")
+                    st.stop()
                 
                 progress_bar.empty()
                 status_text.empty()
@@ -701,7 +849,7 @@ def main():
                 # Apply time filters to all results if set
                 if any([params.get('dep_min_hour'), params.get('dep_max_hour'), params.get('arr_min_hour'), params.get('arr_max_hour')]):
                     filtered_results = []
-                    for result in results:
+                    for result in all_results:
                         if result.success and result.all_flights:
                             # Filter flights within this date combination
                             from copy import copy
@@ -721,24 +869,28 @@ def main():
                                 filtered_result.flights_found = len(filtered_flights)
                                 filtered_results.append(filtered_result)
                     
-                    original_count = len([r for r in results if r.success])
+                    original_count = len([r for r in all_results if r.success])
                     if len(filtered_results) < original_count:
                         st.info(f"🔍 Time filters applied: {len(filtered_results)} of {original_count} date combinations have flights within your time preferences")
                     
-                    results = filtered_results
+                    all_results = filtered_results
                 
-                # Display results
-                display_date_range_results(results, origin, destination, params.get('duration_mode'))
+                # Display results (handles both single and multi-airport)
+                display_date_range_results(all_results, None, None, params.get('duration_mode'))
                 
             else:
-                # Single date search
-                st.subheader("Search Results")
-                st.markdown(f"""
-                **Route:** {origin} → {destination}  
-                **Departure:** {departure_date}  
-                {"**Return:** " + str(return_date) if return_date else "**Trip Type:** One-way"}  
-                **Passengers:** {adults} adult(s)
-                """)
+                # Single date search with multiple airports
+                if len(airport_routes) == 1:
+                    st.subheader("Search Results")
+                    st.markdown(f"""
+                    **Route:** {origins[0]} → {destinations[0]}  
+                    **Departure:** {departure_date}  
+                    {"**Return:** " + str(return_date) if return_date else "**Trip Type:** One-way"}  
+                    **Passengers:** {adults} adult(s)
+                    """)
+                else:
+                    st.subheader(f"Search Results: {len(airport_routes)} Route(s)")
+                    st.caption(f"Comparing: {', '.join([f'{o}→{d}' for o, d in airport_routes])}")
                 
                 # Show time filter info if applied
                 if any([dep_min_hour, dep_max_hour, arr_min_hour, arr_max_hour]):
@@ -749,24 +901,52 @@ def main():
                         filter_info.append(f"Arrival: {arr_min_hour or 0}:00-{arr_max_hour or 23}:00")
                     st.info(f"⏰ Time filters: {', '.join(filter_info)}")
                 
-                with st.spinner("🔄 Searching for flights..."):
-                    flights = client.get_cheapest_flights(
-                        origin=origin,
-                        destination=destination,
-                        departure_date=departure_date,
-                        return_date=return_date,
-                        adults=adults,
-                        max_results=max_results
-                    )
+                all_flights = []
+                
+                # Search all airport combinations
+                for origin, destination in airport_routes:
+                    route_label = f"{origin}→{destination}"
                     
-                    # Apply time filters if set
-                    if any([dep_min_hour, dep_max_hour, arr_min_hour, arr_max_hour]):
-                        original_count = len(flights)
-                        flights = filter_flights_by_time(flights, dep_min_hour, dep_max_hour, arr_min_hour, arr_max_hour)
-                        if len(flights) < original_count:
-                            st.info(f"🔍 Filtered to {len(flights)} flights (removed {original_count - len(flights)} outside time preferences)")
-                    
-                    display_single_search_results(flights, origin, destination)
+                    with st.spinner(f"🔄 Searching {route_label}..."):
+                        try:
+                            flights = client.get_cheapest_flights(
+                                origin=origin,
+                                destination=destination,
+                                departure_date=departure_date,
+                                return_date=return_date,
+                                adults=adults,
+                                max_results=max_results
+                            )
+                            
+                            # Add route info to each flight
+                            for flight in flights:
+                                flight['search_route'] = route_label
+                            
+                            all_flights.extend(flights)
+                            
+                        except Exception as e:
+                            st.warning(f"⚠️ Error searching {route_label}: {str(e)}")
+                            continue
+                
+                if not all_flights:
+                    st.warning("No flights found for any route. Try different dates or airports.")
+                    st.stop()
+                
+                # Apply time filters if set
+                if any([dep_min_hour, dep_max_hour, arr_min_hour, arr_max_hour]):
+                    original_count = len(all_flights)
+                    all_flights = filter_flights_by_time(all_flights, dep_min_hour, dep_max_hour, arr_min_hour, arr_max_hour)
+                    if len(all_flights) < original_count:
+                        st.info(f"🔍 Filtered to {len(all_flights)} flights (removed {original_count - len(all_flights)} outside time preferences)")
+                
+                # Sort by price
+                all_flights.sort(key=lambda f: f['price'])
+                
+                # Display results
+                if len(airport_routes) == 1:
+                    display_single_search_results(all_flights, origins[0], destinations[0])
+                else:
+                    display_multi_airport_results(all_flights, airport_routes)
             
         except Exception as e:
             st.error(f"❌ Error searching for flights: {str(e)}")

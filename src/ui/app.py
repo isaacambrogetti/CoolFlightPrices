@@ -352,8 +352,12 @@ def filter_flights_by_time(flights, dep_min_hour=None, dep_max_hour=None, arr_mi
     for flight in flights:
         # Check outbound departure time
         if dep_min_hour is not None or dep_max_hour is not None:
-            dep_time_str = flight['outbound']['departure_time']
-            dep_hour = int(dep_time_str.split(':')[0])
+            dep_time = flight['outbound']['departure_time']
+            # Handle both datetime.time objects and strings
+            if isinstance(dep_time, str):
+                dep_hour = int(dep_time.split(':')[0])
+            else:
+                dep_hour = dep_time.hour
             
             if dep_min_hour is not None and dep_hour < dep_min_hour:
                 continue
@@ -362,8 +366,12 @@ def filter_flights_by_time(flights, dep_min_hour=None, dep_max_hour=None, arr_mi
         
         # Check outbound arrival time
         if arr_min_hour is not None or arr_max_hour is not None:
-            arr_time_str = flight['outbound']['arrival_time']
-            arr_hour = int(arr_time_str.split(':')[0])
+            arr_time = flight['outbound']['arrival_time']
+            # Handle both datetime.time objects and strings
+            if isinstance(arr_time, str):
+                arr_hour = int(arr_time.split(':')[0])
+            else:
+                arr_hour = arr_time.hour
             
             if arr_min_hour is not None and arr_hour < arr_min_hour:
                 continue
@@ -373,8 +381,12 @@ def filter_flights_by_time(flights, dep_min_hour=None, dep_max_hour=None, arr_mi
         # Also check return flight times if it exists
         if flight.get('return'):
             if dep_min_hour is not None or dep_max_hour is not None:
-                ret_dep_time_str = flight['return']['departure_time']
-                ret_dep_hour = int(ret_dep_time_str.split(':')[0])
+                ret_dep_time = flight['return']['departure_time']
+                # Handle both datetime.time objects and strings
+                if isinstance(ret_dep_time, str):
+                    ret_dep_hour = int(ret_dep_time.split(':')[0])
+                else:
+                    ret_dep_hour = ret_dep_time.hour
                 
                 if dep_min_hour is not None and ret_dep_hour < dep_min_hour:
                     continue
@@ -382,8 +394,12 @@ def filter_flights_by_time(flights, dep_min_hour=None, dep_max_hour=None, arr_mi
                     continue
             
             if arr_min_hour is not None or arr_max_hour is not None:
-                ret_arr_time_str = flight['return']['arrival_time']
-                ret_arr_hour = int(ret_arr_time_str.split(':')[0])
+                ret_arr_time = flight['return']['arrival_time']
+                # Handle both datetime.time objects and strings
+                if isinstance(ret_arr_time, str):
+                    ret_arr_hour = int(ret_arr_time.split(':')[0])
+                else:
+                    ret_arr_hour = ret_arr_time.hour
                 
                 if arr_min_hour is not None and ret_arr_hour < arr_min_hour:
                     continue

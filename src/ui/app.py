@@ -563,7 +563,7 @@ def display_date_range_results(results, origin, destination, duration_mode=None)
     with tab1:
         try:
             fig = create_price_heatmap(results)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
             st.caption("Green = Cheaper, Red = More Expensive")
         except Exception as e:
             st.error(f"Error creating price heatmap: {str(e)}")
@@ -572,21 +572,21 @@ def display_date_range_results(results, origin, destination, duration_mode=None)
     with tab2:
         try:
             fig = create_price_distribution(results)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         except Exception as e:
             st.error(f"Error creating price distribution: {str(e)}")
     
     with tab3:
         try:
             fig = create_price_by_duration(results)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         except Exception as e:
             st.error(f"Error creating duration vs price chart: {str(e)}")
     
     with tab4:
         try:
             fig = create_calendar_view(results)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         except Exception as e:
             st.error(f"Error creating calendar view: {str(e)}")
     
@@ -605,7 +605,7 @@ def display_date_range_results(results, origin, destination, duration_mode=None)
                 })
         
         df = pd.DataFrame(df_data)
-        st.dataframe(df, use_container_width=True, height=400)
+        st.dataframe(df, width="stretch", height=400)
 
 
 def main():
@@ -652,10 +652,10 @@ def main():
         params = date_range_search_ui(st.sidebar)
         if params is None:
             st.stop()
-        search_button = st.sidebar.button("🔍 Search Date Range", type="primary", use_container_width=True)
+        search_button = st.sidebar.button("🔍 Search Date Range", type="primary", width="stretch")
     else:
         departure_date, return_date, adults, max_results = single_date_search_ui(st.sidebar)
-        search_button = st.sidebar.button("🔍 Search Flights", type="primary", use_container_width=True)
+        search_button = st.sidebar.button("🔍 Search Flights", type="primary", width="stretch")
     
     # Main content area
     if search_button:

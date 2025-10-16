@@ -40,8 +40,10 @@ def create_price_heatmap(results: List[SearchResult]) -> go.Figure:
     for r in valid_results:
         try:
             data.append({
-                'Departure': r.departure_date.strftime('%b %d'),
-                'Return': r.return_date.strftime('%b %d'),
+                'Departure': r.departure_date,  # Keep as date object
+                'Return': r.return_date,  # Keep as date object
+                'Departure_Label': r.departure_date.strftime('%b %d'),
+                'Return_Label': r.return_date.strftime('%b %d'),
                 'Price': float(r.cheapest_price),
                 'Days': r.days_at_destination
             })
@@ -62,19 +64,41 @@ def create_price_heatmap(results: List[SearchResult]) -> go.Figure:
     
     df = pd.DataFrame(data)
     
-    # Create pivot table for heatmap
+    # Sort by actual dates
+    df = df.sort_values(['Departure', 'Return'])
+    
+    # Create pivot table for heatmap using date objects
     try:
         pivot = df.pivot_table(
             values='Price',
-            index='Departure',
-            columns='Return',
+            index='Departure_Label',  # Use labels for display
+            columns='Return_Label',
             aggfunc='min'
         )
+        
+        # Get the order based on actual dates
+        dep_order = df.sort_values('Departure')['Departure_Label'].unique()
+        ret_order = df.sort_values('Return')['Return_Label'].unique()
+        
+        # Reindex to ensure chronological order
+        pivot = pivot.reindex(index=dep_order, columns=ret_order)
+        
+        # Check if we have enough data
+        if pivot.size == 0 or pivot.isna().all().all():
+            fig = go.Figure()
+            fig.add_annotation(
+                text="No valid date combinations to display",
+                xref="paper", yref="paper",
+                x=0.5, y=0.5, showarrow=False,
+                font=dict(size=16)
+            )
+            return fig
+        
     except Exception as e:
         # Handle edge cases (e.g., single data point)
         fig = go.Figure()
         fig.add_annotation(
-            text=f"Not enough data to create heatmap<br>({len(df)} result(s) found)",
+            text=f"Not enough data to create heatmap<br>({len(df)} result(s) found)<br>{str(e)}",
             xref="paper", yref="paper",
             x=0.5, y=0.5, showarrow=False,
             font=dict(size=16)
@@ -84,20 +108,39 @@ def create_price_heatmap(results: List[SearchResult]) -> go.Figure:
     # Get currency
     currency = valid_results[0].currency
     
+    # Handle NaN values in the heatmap (for sparse data)
+    # Replace NaN with a sentinel value for better visualization
+    z_values = pivot.values.copy()
+    
+    # Create custom text that shows prices or '-' for missing data
+    text_values = []
+    for row in pivot.values:
+        text_row = []
+        for val in row:
+            if pd.isna(val):
+                text_row.append('-')
+            else:
+                text_row.append(f'{val:.0f}')
+        text_values.append(text_row)
+    
     # Create heatmap
     fig = go.Figure(data=go.Heatmap(
-        z=pivot.values,
-        x=pivot.columns,
-        y=pivot.index,
+        z=z_values,
+        x=pivot.columns.tolist(),
+        y=pivot.index.tolist(),
         colorscale='RdYlGn_r',  # Red (expensive) to Green (cheap)
-        text=pivot.values,
-        texttemplate='%{text:.0f}',
-        textfont={"size": 11, "color": "black"},
+        text=text_values,
+        texttemplate='%{text}',
+        textfont={"size": 10, "color": "black"},
         colorbar=dict(
-            title=f"Price ({currency})",
-            titleside="right"
+            title=dict(
+                text=f"Price ({currency})",
+                side="right"
+            )
         ),
-        hovertemplate='Departure: %{y}<br>Return: %{x}<br>Price: ' + currency + ' %{z:.2f}<extra></extra>'
+        hovertemplate='Departure: %{y}<br>Return: %{x}<br>Price: ' + currency + ' %{z:.2f}<extra></extra>',
+        zmin=pivot.min().min(),  # Set color scale based on actual data
+        zmax=pivot.max().max()
     ))
     
     fig.update_layout(

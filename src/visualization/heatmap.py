@@ -10,6 +10,114 @@ import pandas as pd
 from typing import List
 from src.api.batch_search import SearchResult
 
+def create_airport_price_comparison(results: List[SearchResult]) -> List[go.Figure]:
+    """
+    Create bar charts comparing average prices per departure and arrival airport.
+    Only shown when there are multiple airports for departure or arrival.
+    Returns a list of Plotly Figure objects (one for departure, one for arrival).
+    """
+    valid_results = [r for r in results if r.success and r.cheapest_price is not None]
+    if not valid_results:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No price data available",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=20)
+        )
+        return [fig]
+
+    # Collect airport info
+    dep_prices = {}
+    arr_prices = {}
+    for r in valid_results:
+        origin = getattr(r, 'origin', None)
+        destination = getattr(r, 'destination', None)
+        price = float(r.cheapest_price)
+        if origin:
+            dep_prices.setdefault(origin, []).append(price)
+        if destination:
+            arr_prices.setdefault(destination, []).append(price)
+
+    # Only show if there are multiple airports
+    figs = []
+    currency = valid_results[0].currency
+    if len(dep_prices) > 1:
+        dep_df = pd.DataFrame({
+            'Airport': list(dep_prices.keys()),
+            'Avg Price': [sum(prices)/len(prices) for prices in dep_prices.values()],
+            'Min Price': [min(prices) for prices in dep_prices.values()],
+            'Median Price': [pd.Series(prices).median() for prices in dep_prices.values()]
+        })
+        fig_dep = go.Figure()
+        fig_dep.add_trace(go.Bar(
+            x=dep_df['Airport'],
+            y=dep_df['Avg Price'],
+            marker=dict(color=dep_df['Avg Price'], colorscale='RdYlGn_r', showscale=True, colorbar=dict(title=f"Avg Price ({currency})")),
+            text=dep_df['Avg Price'].apply(lambda x: f"{currency} {x:.0f}"),
+            textposition='outside',
+            name='Average Price',
+            hovertemplate='Airport: %{x}<br>Avg Price: ' + currency + ' %{y:.2f}<br>Min: %{customdata[0]:.2f}<br>Median: %{customdata[1]:.2f}<extra></extra>',
+            customdata=dep_df[['Min Price', 'Median Price']].values
+        ))
+        fig_dep.update_layout(
+            title="Average Price by Departure Airport",
+            xaxis_title="Departure Airport",
+            yaxis_title=f"Avg Price ({currency})",
+            height=400,
+            showlegend=False
+        )
+        figs.append(fig_dep)
+
+    if len(arr_prices) > 1:
+        arr_df = pd.DataFrame({
+            'Airport': list(arr_prices.keys()),
+            'Avg Price': [sum(prices)/len(prices) for prices in arr_prices.values()],
+            'Min Price': [min(prices) for prices in arr_prices.values()],
+            'Median Price': [pd.Series(prices).median() for prices in arr_prices.values()]
+        })
+        fig_arr = go.Figure()
+        fig_arr.add_trace(go.Bar(
+            x=arr_df['Airport'],
+            y=arr_df['Avg Price'],
+            marker=dict(color=arr_df['Avg Price'], colorscale='RdYlGn_r', showscale=True, colorbar=dict(title=f"Avg Price ({currency})")),
+            text=arr_df['Avg Price'].apply(lambda x: f"{currency} {x:.0f}"),
+            textposition='outside',
+            name='Average Price',
+            hovertemplate='Airport: %{x}<br>Avg Price: ' + currency + ' %{y:.2f}<br>Min: %{customdata[0]:.2f}<br>Median: %{customdata[1]:.2f}<extra></extra>',
+            customdata=arr_df[['Min Price', 'Median Price']].values
+        ))
+        fig_arr.update_layout(
+            title="Average Price by Arrival Airport",
+            xaxis_title="Arrival Airport",
+            yaxis_title=f"Avg Price ({currency})",
+            height=400,
+            showlegend=False
+        )
+        figs.append(fig_arr)
+
+    if not figs:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="Not enough airport variety for comparison",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=18)
+        )
+        return [fig]
+    return figs
+"""
+Visualization Module
+
+Create interactive charts and heatmaps for flight price comparisons.
+"""
+
+import plotly.graph_objects as go
+import plotly.express as px
+import pandas as pd
+from typing import List
+from src.api.batch_search import SearchResult
+
 
 def create_price_heatmap(results: List[SearchResult]) -> go.Figure:
     """

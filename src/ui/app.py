@@ -1,3 +1,12 @@
+def get_airline_logo_html(iata_code: str) -> str:
+    """Return HTML for airline logo with fallback to code if missing."""
+    if not iata_code or len(iata_code) != 2:
+        return f"<span>{iata_code}</span>"
+    url = f"https://content.airhex.com/content/logos/airlines_{iata_code.upper()}_100_100_s.png"
+    # Use onerror to fallback to code if image fails to load
+    # Remove background and border for a cleaner look
+    # Simple logo rendering, no background or border modifications
+    return f'<img src="{url}" alt="logo" width="20" style="vertical-align:middle; margin-right:4px;" onerror="this.style.display=\'none\';this.insertAdjacentHTML(\'afterend\',\'<span>{iata_code}</span>\');"/> '
 """
 CoolFlightPrices - Streamlit UI (Updated with Date Range Search)
 
@@ -21,7 +30,8 @@ from src.visualization.heatmap import (
     create_price_heatmap, 
     create_price_distribution, 
     create_price_by_duration,
-    create_calendar_view
+    create_calendar_view,
+    create_airport_price_comparison
 )
 from config.settings import Config
 
@@ -433,29 +443,27 @@ def display_single_search_results(flights, origin, destination):
                 st.markdown("**✈️ Outbound Flight**")
                 outbound = flight['outbound']
                 st.markdown(f"""
-                - **Route:** {outbound['origin']} → {outbound['destination']}
-                - **Date:** {outbound['departure_date']}
-                - **Departure:** {outbound['departure_time']}
-                - **Arrival:** {outbound['arrival_time']}
-                - **Airline:** {outbound['airline']} {outbound['flight_number']}
-                - **Stops:** {outbound['stops']}
-                - **Duration:** {outbound['duration']}
-                """)
-            
+                - **Route:** {outbound['origin']} → {outbound['destination']}<br>
+                - **Date:** {outbound['departure_date']}<br>
+                - **Departure:** {outbound['departure_time']}<br>
+                - **Arrival:** {outbound['arrival_time']}<br>
+                - **Airline:** {get_airline_logo_html(outbound['airline'])}{outbound['flight_number']}<br>
+                - **Stops:** {outbound['stops']}<br>
+                - **Duration:** {outbound['duration']}<br>
+                """, unsafe_allow_html=True)
             if flight['return']:
                 with col2:
                     st.markdown("**🔙 Return Flight**")
                     return_flight = flight['return']
                     st.markdown(f"""
-                    - **Route:** {return_flight['origin']} → {return_flight['destination']}
-                    - **Date:** {return_flight['departure_date']}
-                    - **Departure:** {return_flight['departure_time']}
-                    - **Arrival:** {return_flight['arrival_time']}
-                    - **Airline:** {return_flight['airline']} {return_flight['flight_number']}
-                    - **Stops:** {return_flight['stops']}
-                    - **Duration:** {return_flight['duration']}
-                    """)
-            
+                    - **Route:** {return_flight['origin']} → {return_flight['destination']}<br>
+                    - **Date:** {return_flight['departure_date']}<br>
+                    - **Departure:** {return_flight['departure_time']}<br>
+                    - **Arrival:** {return_flight['arrival_time']}<br>
+                    - **Airline:** {get_airline_logo_html(return_flight['airline'])}{return_flight['flight_number']}<br>
+                    - **Stops:** {return_flight['stops']}<br>
+                    - **Duration:** {return_flight['duration']}<br>
+                    """, unsafe_allow_html=True)
             st.markdown(f"**Seats Available:** {flight['number_of_bookable_seats']}")
 
 
@@ -492,29 +500,27 @@ def display_multi_airport_results(flights, airport_routes):
                 st.markdown("**✈️ Outbound Flight**")
                 outbound = flight['outbound']
                 st.markdown(f"""
-                - **Route:** {outbound['origin']} → {outbound['destination']}
-                - **Date:** {outbound['departure_date']}
-                - **Departure:** {outbound['departure_time']}
-                - **Arrival:** {outbound['arrival_time']}
-                - **Airline:** {outbound['airline']} {outbound['flight_number']}
-                - **Stops:** {outbound['stops']}
-                - **Duration:** {outbound['duration']}
-                """)
-            
+                - **Route:** {outbound['origin']} → {outbound['destination']}<br>
+                - **Date:** {outbound['departure_date']}<br>
+                - **Departure:** {outbound['departure_time']}<br>
+                - **Arrival:** {outbound['arrival_time']}<br>
+                - **Airline:** {get_airline_logo_html(outbound['airline'])}{outbound['flight_number']}<br>
+                - **Stops:** {outbound['stops']}<br>
+                - **Duration:** {outbound['duration']}<br>
+                """, unsafe_allow_html=True)
             if flight['return']:
                 with col2:
                     st.markdown("**🔙 Return Flight**")
                     return_flight = flight['return']
                     st.markdown(f"""
-                    - **Route:** {return_flight['origin']} → {return_flight['destination']}
-                    - **Date:** {return_flight['departure_date']}
-                    - **Departure:** {return_flight['departure_time']}
-                    - **Arrival:** {return_flight['arrival_time']}
-                    - **Airline:** {return_flight['airline']} {return_flight['flight_number']}
-                    - **Stops:** {return_flight['stops']}
-                    - **Duration:** {return_flight['duration']}
-                    """)
-            
+                    - **Route:** {return_flight['origin']} → {return_flight['destination']}<br>
+                    - **Date:** {return_flight['departure_date']}<br>
+                    - **Departure:** {return_flight['departure_time']}<br>
+                    - **Arrival:** {return_flight['arrival_time']}<br>
+                    - **Airline:** {get_airline_logo_html(return_flight['airline'])}{return_flight['flight_number']}<br>
+                    - **Stops:** {return_flight['stops']}<br>
+                    - **Duration:** {return_flight['duration']}<br>
+                    """, unsafe_allow_html=True)
             st.markdown(f"**Seats Available:** {flight['number_of_bookable_seats']}")
 
 
@@ -581,21 +587,32 @@ def display_date_range_results(results, origin, destination, duration_mode=None)
                     flight = result.cheapest_flight
                     outbound = flight['outbound']
                     st.markdown(f"""
-                    **Best Flight:**
-                    - Price: {result.currency} {result.cheapest_price:.2f}
-                    - Outbound: {outbound['airline']} {outbound['flight_number']} at {outbound['departure_time']}
-                    - Stops: {outbound['stops']}
-                    """)
+                    **Best Flight:**<br>
+                    - Price: {result.currency} {result.cheapest_price:.2f}<br>
+                    - Outbound: {get_airline_logo_html(outbound['airline'])}<b>{outbound['airline']}</b> {outbound['flight_number']} at {outbound['departure_time']}<br>
+                    - Stops: {outbound['stops']}<br>
+                    """, unsafe_allow_html=True)
                     
                     if flight['return']:
                         ret = flight['return']
-                        st.markdown(f"- Return: {ret['airline']} {ret['flight_number']} at {ret['departure_time']}")
+                        st.markdown(f"- Return: {get_airline_logo_html(ret['airline'])}<b>{ret['airline']}</b> {ret['flight_number']} at {ret['departure_time']}", unsafe_allow_html=True)
     
     # Visualizations
     st.subheader("📊 Price Analysis")
     
-    tab1, tab2, tab3, tab4 = st.tabs(["Price Heatmap", "Distribution", "Duration vs Price", "Calendar View"])
-    
+    # Determine if multi-airport search
+    dep_airports = set([getattr(r, 'origin', None) for r in results if getattr(r, 'origin', None)])
+    arr_airports = set([getattr(r, 'destination', None) for r in results if getattr(r, 'destination', None)])
+    multi_airport = len(dep_airports) > 1 or len(arr_airports) > 1
+
+    tab_names = ["Price Heatmap"]
+    if multi_airport:
+        tab_names.append("Airport Price Comparison")
+    else:
+        tab_names.append("Distribution")
+    tab_names += ["Duration vs Price", "Calendar View"]
+    tab1, tab2, tab3, tab4 = st.tabs(tab_names)
+
     with tab1:
         try:
             fig = create_price_heatmap(results)
@@ -604,21 +621,31 @@ def display_date_range_results(results, origin, destination, duration_mode=None)
         except Exception as e:
             st.error(f"Error creating price heatmap: {str(e)}")
             st.info("Try adjusting your search parameters or time filters.")
-    
+
     with tab2:
-        try:
-            fig = create_price_distribution(results)
-            st.plotly_chart(fig, width="stretch")
-        except Exception as e:
-            st.error(f"Error creating price distribution: {str(e)}")
-    
+        if multi_airport:
+            try:
+                from src.visualization.heatmap import create_airport_price_comparison
+                figs = create_airport_price_comparison(results)
+                for fig in figs:
+                    st.plotly_chart(fig, width="stretch")
+                st.caption("Shows average, min, and median prices per airport. Only available for multi-airport searches.")
+            except Exception as e:
+                st.error(f"Error creating airport price comparison: {str(e)}")
+        else:
+            try:
+                fig = create_price_distribution(results)
+                st.plotly_chart(fig, width="stretch")
+            except Exception as e:
+                st.error(f"Error creating price distribution: {str(e)}")
+
     with tab3:
         try:
             fig = create_price_by_duration(results)
             st.plotly_chart(fig, width="stretch")
         except Exception as e:
             st.error(f"Error creating duration vs price chart: {str(e)}")
-    
+
     with tab4:
         try:
             fig = create_calendar_view(results)

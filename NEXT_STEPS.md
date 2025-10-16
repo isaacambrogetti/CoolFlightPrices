@@ -184,27 +184,57 @@ Each search = 1 API call.
 
 ## 🔜 What's Next?
 
-Once the basic app is working, we can add:
+### 🎯 Phase 1: Intelligent Date Range Search (PRIORITY)
 
-### Phase 1: Flight Tracking
-- Save favorite flights
-- Store in database
-- Monitor price changes
+**Goal:** Compare flights across multiple date combinations to find the best deals.
 
-### Phase 2: Price History
-- Track prices over time
-- Show price trends
-- Alert on price drops
+**Features to implement:**
+- **Departure date range** - Select a range of possible departure dates (e.g., Nov 10-15)
+- **Return date range** - Select a range of possible return dates (e.g., Nov 20-25)
+- **Minimum stay requirement** - Ensure you're at destination for X days (e.g., "I want to be there at least 3 full days")
+- **Smart search** - Automatically query all valid date combinations
+- **Results comparison** - Display all options in a sortable table/matrix
+- **Best deal highlighting** - Show cheapest options per date combination
+- **Calendar heatmap** - Visual price comparison across dates
 
-### Phase 3: Visualization
+**Why this matters:**
+- Flight prices vary dramatically by day
+- Find the cheapest combination within your flexibility
+- Plan trips around best prices instead of fixed dates
+- See patterns (e.g., weekday vs weekend pricing)
+
+**Implementation approach:**
+1. Add date range pickers to UI (start/end for departure, start/end for return)
+2. Add "minimum days at destination" slider
+3. Generate all valid date combinations
+4. Batch API calls with rate limiting
+5. Aggregate and display results
+6. Add sorting and filtering options
+7. Create visual comparison tools
+
+**API considerations:**
+- Each date combination = 1 API call
+- With free tier (2000/month), we can search ~66 date combinations per day
+- Need smart rate limiting and result caching
+- Option to use Amadeus' "Flight Inspiration Search" API (fewer calls)
+
+### Phase 2: Flight Tracking
+- Save favorite flights from search results
+- Store in database with price history
+- Monitor tracked flights for price changes
+- Set custom price alerts
+
+### Phase 3: Price History & Visualization
+- Track prices over time for saved flights
 - Port charts from original FlightsPlot
-- Interactive price graphs
-- Calendar heatmaps
+- Interactive price graphs with Plotly
+- Trend analysis and predictions
 
 ### Phase 4: Advanced Features
 - Multi-city searches
-- Flexible dates
-- Price predictions
+- Nearby airports option
+- Class of service selection (economy/business)
+- Airline preferences
 - Export to CSV
 
 **Check TODO.md for the complete roadmap!**

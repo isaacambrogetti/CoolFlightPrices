@@ -38,22 +38,48 @@ def create_price_heatmap(results: List[SearchResult]) -> go.Figure:
     # Create DataFrame
     data = []
     for r in valid_results:
-        data.append({
-            'Departure': r.departure_date.strftime('%b %d'),
-            'Return': r.return_date.strftime('%b %d'),
-            'Price': r.cheapest_price,
-            'Days': r.days_at_destination
-        })
+        try:
+            data.append({
+                'Departure': r.departure_date.strftime('%b %d'),
+                'Return': r.return_date.strftime('%b %d'),
+                'Price': float(r.cheapest_price),
+                'Days': r.days_at_destination
+            })
+        except Exception as e:
+            # Skip results with invalid data
+            print(f"Skipping result due to error: {e}")
+            continue
+    
+    if not data:
+        fig = go.Figure()
+        fig.add_annotation(
+            text="No valid data for heatmap",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=20)
+        )
+        return fig
     
     df = pd.DataFrame(data)
     
     # Create pivot table for heatmap
-    pivot = df.pivot_table(
-        values='Price',
-        index='Departure',
-        columns='Return',
-        aggfunc='min'
-    )
+    try:
+        pivot = df.pivot_table(
+            values='Price',
+            index='Departure',
+            columns='Return',
+            aggfunc='min'
+        )
+    except Exception as e:
+        # Handle edge cases (e.g., single data point)
+        fig = go.Figure()
+        fig.add_annotation(
+            text=f"Not enough data to create heatmap<br>({len(df)} result(s) found)",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=16)
+        )
+        return fig
     
     # Get currency
     currency = valid_results[0].currency
@@ -113,8 +139,18 @@ def create_price_distribution(results: List[SearchResult]) -> go.Figure:
         )
         return fig
     
-    prices = [r.cheapest_price for r in valid_results]
-    currency = valid_results[0].currency
+    try:
+        prices = [float(r.cheapest_price) for r in valid_results]
+        currency = valid_results[0].currency
+    except (ValueError, TypeError, AttributeError) as e:
+        fig = go.Figure()
+        fig.add_annotation(
+            text=f"Error processing price data: {str(e)}",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=16)
+        )
+        return fig
     
     fig = go.Figure(data=[go.Histogram(
         x=prices,
@@ -157,18 +193,47 @@ def create_price_by_duration(results: List[SearchResult]) -> go.Figure:
         )
         return fig
     
-    currency = valid_results[0].currency
-    
-    # Prepare data
-    durations = [r.total_duration for r in valid_results]
-    prices = [r.cheapest_price for r in valid_results]
-    hover_text = [
-        f"{r.departure_date.strftime('%b %d')} → {r.return_date.strftime('%b %d')}<br>"
-        f"Duration: {r.total_duration} days<br>"
-        f"Days at destination: {r.days_at_destination}<br>"
-        f"Price: {currency} {r.cheapest_price:.2f}"
-        for r in valid_results
-    ]
+    try:
+        currency = valid_results[0].currency
+        
+        # Prepare data with validation
+        durations = []
+        prices = []
+        hover_text = []
+        
+        for r in valid_results:
+            try:
+                durations.append(int(r.total_duration))
+                prices.append(float(r.cheapest_price))
+                hover_text.append(
+                    f"{r.departure_date.strftime('%b %d')} → {r.return_date.strftime('%b %d')}<br>"
+                    f"Duration: {r.total_duration} days<br>"
+                    f"Days at destination: {r.days_at_destination}<br>"
+                    f"Price: {currency} {r.cheapest_price:.2f}"
+                )
+            except (ValueError, TypeError, AttributeError):
+                # Skip invalid entries
+                continue
+        
+        if not durations or not prices:
+            fig = go.Figure()
+            fig.add_annotation(
+                text="No valid data points",
+                xref="paper", yref="paper",
+                x=0.5, y=0.5, showarrow=False,
+                font=dict(size=20)
+            )
+            return fig
+            
+    except Exception as e:
+        fig = go.Figure()
+        fig.add_annotation(
+            text=f"Error processing data: {str(e)}",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=16)
+        )
+        return fig
     
     fig = go.Figure(data=go.Scatter(
         x=durations,
@@ -218,24 +283,36 @@ def create_calendar_view(results: List[SearchResult]) -> go.Figure:
         )
         return fig
     
-    # Group by departure date and get min price
-    df = pd.DataFrame([
-        {
-            'date': r.departure_date,
-            'price': r.cheapest_price,
-            'return': r.return_date,
-            'days': r.days_at_destination
-        }
-        for r in valid_results
-    ])
-    
-    min_prices = df.groupby('date').agg({
-        'price': 'min',
-        'return': 'first',
-        'days': 'first'
-    }).reset_index()
-    
-    currency = valid_results[0].currency
+    try:
+        # Group by departure date and get min price
+        df = pd.DataFrame([
+            {
+                'date': r.departure_date,
+                'price': float(r.cheapest_price),
+                'return': r.return_date,
+                'days': r.days_at_destination
+            }
+            for r in valid_results
+        ])
+        
+        min_prices = df.groupby('date').agg({
+            'price': 'min',
+            'return': 'first',
+            'days': 'first'
+        }).reset_index()
+        
+        currency = valid_results[0].currency
+        
+    except Exception as e:
+        # Handle grouping errors or data issues
+        fig = go.Figure()
+        fig.add_annotation(
+            text=f"Error creating calendar view: {str(e)}",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=16)
+        )
+        return fig
     
     fig = go.Figure(data=go.Bar(
         x=min_prices['date'],

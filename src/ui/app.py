@@ -484,11 +484,14 @@ def display_date_range_results(results, origin, destination, duration_mode=None)
                     arr_min_hour, arr_max_hour
                 )
                 if filtered_flights:
-                    # Update result with filtered flights and recalculate cheapest
-                    result.all_flights = filtered_flights
-                    result.cheapest_price = min(f['price'] for f in filtered_flights)
-                    result.cheapest_flight = min(filtered_flights, key=lambda f: f['price'])
-                    filtered_results.append(result)
+                    # Create a new result with filtered data (don't modify original)
+                    from copy import copy
+                    filtered_result = copy(result)
+                    filtered_result.all_flights = filtered_flights
+                    filtered_result.cheapest_price = min(f['price'] for f in filtered_flights)
+                    filtered_result.cheapest_flight = min(filtered_flights, key=lambda f: f['price'])
+                    filtered_result.flights_found = len(filtered_flights)
+                    filtered_results.append(filtered_result)
         
         if len(filtered_results) < len([r for r in results if r.success]):
             original_count = len([r for r in results if r.success])
@@ -558,17 +561,34 @@ def display_date_range_results(results, origin, destination, duration_mode=None)
     tab1, tab2, tab3, tab4 = st.tabs(["Price Heatmap", "Distribution", "Duration vs Price", "Calendar View"])
     
     with tab1:
-        st.plotly_chart(create_price_heatmap(results), use_container_width=True)
-        st.caption("Green = Cheaper, Red = More Expensive")
+        try:
+            fig = create_price_heatmap(results)
+            st.plotly_chart(fig, use_container_width=True)
+            st.caption("Green = Cheaper, Red = More Expensive")
+        except Exception as e:
+            st.error(f"Error creating price heatmap: {str(e)}")
+            st.info("Try adjusting your search parameters or time filters.")
     
     with tab2:
-        st.plotly_chart(create_price_distribution(results), use_container_width=True)
+        try:
+            fig = create_price_distribution(results)
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error(f"Error creating price distribution: {str(e)}")
     
     with tab3:
-        st.plotly_chart(create_price_by_duration(results), use_container_width=True)
+        try:
+            fig = create_price_by_duration(results)
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error(f"Error creating duration vs price chart: {str(e)}")
     
     with tab4:
-        st.plotly_chart(create_calendar_view(results), use_container_width=True)
+        try:
+            fig = create_calendar_view(results)
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error(f"Error creating calendar view: {str(e)}")
     
     # Full results table
     with st.expander("📋 View All Results"):

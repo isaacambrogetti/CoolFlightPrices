@@ -33,6 +33,7 @@ from src.visualization.heatmap import (
     create_calendar_view,
     create_airport_price_comparison
 )
+from src.utils.airport_search import search_airports, parse_airport_input, get_airport_display_name, get_all_airport_options
 from config.settings import Config
 
 
@@ -422,20 +423,37 @@ def filter_flights_by_time(flights, dep_min_hour=None, dep_max_hour=None, arr_mi
 
 
 def display_single_search_results(flights, origin, destination):
-    """Display results for single date search"""
+    """Display results for single date search with visualizations (matching flexible search format)"""
     if not flights:
         st.warning("No flights found for your search criteria. Try different dates or airports.")
         return
     
-    st.success(f"✅ Found {len(flights)} flight options!")
+    # Statistics
+    prices = [f['price'] for f in flights]
+    currency = flights[0]['currency'] if flights else 'EUR'
     
-    # Display flights
-    for i, flight in enumerate(flights, 1):
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Flights", len(flights))
+    with col2:
+        st.metric("Cheapest", f"{currency} {min(prices):.2f}" if prices else "N/A")
+    with col3:
+        st.metric("Average", f"{currency} {sum(prices)/len(prices):.2f}" if prices else "N/A")
+    with col4:
+        st.metric("Most Expensive", f"{currency} {max(prices):.2f}" if prices else "N/A")
+    
+    # Top 5 Best Deals
+    st.subheader("🏆 Top 5 Best Deals")
+    
+    # Sort by price (cheapest first) and show top 5
+    sorted_flights = sorted(flights, key=lambda f: f['price'])[:5]
+    
+    for i, flight in enumerate(sorted_flights, 1):
         with st.expander(
-            f"💰 {flight['currency']} {flight['price']:.2f} - "
+            f"#{i}: {flight['currency']} {flight['price']:.2f} - "
             f"{flight['outbound']['airline']} {flight['outbound']['flight_number']}"
             f"{' (Cheapest!)' if i == 1 else ''}",
-            expanded=(i <= 3)
+            expanded=(i <= 2)
         ):
             col1, col2 = st.columns(2)
             
@@ -451,6 +469,7 @@ def display_single_search_results(flights, origin, destination):
                 - **Stops:** {outbound['stops']}<br>
                 - **Duration:** {outbound['duration']}<br>
                 """, unsafe_allow_html=True)
+            
             if flight['return']:
                 with col2:
                     st.markdown("**🔙 Return Flight**")
@@ -464,7 +483,199 @@ def display_single_search_results(flights, origin, destination):
                     - **Stops:** {return_flight['stops']}<br>
                     - **Duration:** {return_flight['duration']}<br>
                     """, unsafe_allow_html=True)
+            
             st.markdown(f"**Seats Available:** {flight['number_of_bookable_seats']}")
+    
+    # Visualizations
+    st.subheader("📊 Price Analysis")
+    
+    tab1, tab2, tab3 = st.tabs(["Price by Departure Time", "Price by Return Time", "Stops vs Price"])
+    
+    with tab1:
+        try:
+            # Create scatter plot for outbound departure time vs price
+            import plotly.express as px
+            from datetime import datetime
+            
+            departure_times = []
+            prices_for_plot = []
+            airlines = []
+            hover_texts = []
+            
+            for f in flights:
+                outbound = f['outbound']
+                dep_time = outbound.get('departure_time')
+                
+                if dep_time:
+                    # Convert time to decimal hours for plotting
+                    if isinstance(dep_time, str):
+                        time_parts = dep_time.split(':')
+                        hours = int(time_parts[0])
+                        minutes = int(time_parts[1]) if len(time_parts) > 1 else 0
+                    else:  # datetime.time object
+                        hours = dep_time.hour
+                        minutes = dep_time.minute
+                    
+                    decimal_hour = hours + minutes / 60
+                    departure_times.append(decimal_hour)
+                    prices_for_plot.append(f['price'])
+                    airlines.append(outbound['airline'])
+                    hover_texts.append(
+                        f"Airline: {outbound['airline']} {outbound['flight_number']}<br>"
+                        f"Departure: {dep_time}<br>"
+                        f"Price: {f['currency']} {f['price']:.2f}<br>"
+                        f"Stops: {outbound['stops']}"
+                    )
+            
+            if departure_times:
+                fig = px.scatter(
+                    x=departure_times,
+                    y=prices_for_plot,
+                    color=airlines,
+                    labels={'x': 'Departure Time (hour of day)', 'y': f'Price ({currency})'},
+                    title='Price by Outbound Departure Time',
+                    height=400
+                )
+                fig.update_traces(marker=dict(size=12), hovertemplate='%{text}')
+                fig.update_xaxes(
+                    tickmode='linear',
+                    tick0=0,
+                    dtick=2,
+                    tickformat='.0f',
+                    range=[0, 24]
+                )
+                
+                # Update hover text for each trace
+                for i, trace in enumerate(fig.data):
+                    trace_indices = [j for j, a in enumerate(airlines) if a == trace.name]
+                    trace.customdata = [hover_texts[j] for j in trace_indices]
+                    trace.hovertemplate = '%{customdata}<extra></extra>'
+                
+                st.plotly_chart(fig, use_container_width=True)
+                st.caption("💡 Find the cheapest time of day to depart. Morning flights are often cheaper!")
+            else:
+                st.info("Not enough data to create departure time chart")
+        except Exception as e:
+            st.error(f"Error creating departure time chart: {str(e)}")
+    
+    with tab2:
+        try:
+            # Create scatter plot for return departure time vs price (for roundtrips)
+            import plotly.express as px
+            
+            return_times = []
+            prices_for_plot = []
+            airlines = []
+            hover_texts = []
+            
+            for f in flights:
+                if f.get('return'):
+                    return_flight = f['return']
+                    ret_time = return_flight.get('departure_time')
+                    
+                    if ret_time:
+                        # Convert time to decimal hours for plotting
+                        if isinstance(ret_time, str):
+                            time_parts = ret_time.split(':')
+                            hours = int(time_parts[0])
+                            minutes = int(time_parts[1]) if len(time_parts) > 1 else 0
+                        else:  # datetime.time object
+                            hours = ret_time.hour
+                            minutes = ret_time.minute
+                        
+                        decimal_hour = hours + minutes / 60
+                        return_times.append(decimal_hour)
+                        prices_for_plot.append(f['price'])
+                        airlines.append(return_flight['airline'])
+                        hover_texts.append(
+                            f"Airline: {return_flight['airline']} {return_flight['flight_number']}<br>"
+                            f"Return Departure: {ret_time}<br>"
+                            f"Total Price: {f['currency']} {f['price']:.2f}<br>"
+                            f"Stops: {return_flight['stops']}"
+                        )
+            
+            if return_times:
+                fig = px.scatter(
+                    x=return_times,
+                    y=prices_for_plot,
+                    color=airlines,
+                    labels={'x': 'Return Departure Time (hour of day)', 'y': f'Price ({currency})'},
+                    title='Price by Return Departure Time',
+                    height=400
+                )
+                fig.update_traces(marker=dict(size=12))
+                fig.update_xaxes(
+                    tickmode='linear',
+                    tick0=0,
+                    dtick=2,
+                    tickformat='.0f',
+                    range=[0, 24]
+                )
+                
+                # Update hover text
+                for i, trace in enumerate(fig.data):
+                    trace_indices = [j for j, a in enumerate(airlines) if a == trace.name]
+                    trace.customdata = [hover_texts[j] for j in trace_indices]
+                    trace.hovertemplate = '%{customdata}<extra></extra>'
+                
+                st.plotly_chart(fig, use_container_width=True)
+                st.caption("💡 Return flight timing can significantly affect total price!")
+            else:
+                st.info("No return flights to analyze (one-way search)")
+        except Exception as e:
+            st.error(f"Error creating return time chart: {str(e)}")
+    
+    with tab3:
+        try:
+            # Create box plot for stops vs price
+            import plotly.express as px
+            
+            stops_data = []
+            prices_for_plot = []
+            
+            for f in flights:
+                outbound_stops = f['outbound'].get('stops', 'Unknown')
+                stops_data.append(f"{outbound_stops} stops" if outbound_stops != 'Direct' else 'Direct')
+                prices_for_plot.append(f['price'])
+            
+            if stops_data:
+                fig = px.box(
+                    x=stops_data,
+                    y=prices_for_plot,
+                    labels={'x': 'Number of Stops', 'y': f'Price ({currency})'},
+                    title='Price Distribution by Number of Stops',
+                    height=400,
+                    color=stops_data
+                )
+                fig.update_traces(marker=dict(size=8))
+                st.plotly_chart(fig, use_container_width=True)
+                st.caption("💡 Direct flights are usually more expensive. Compare the price difference!")
+            else:
+                st.info("Not enough data to create stops analysis")
+        except Exception as e:
+            st.error(f"Error creating stops chart: {str(e)}")
+    
+    # Full results table
+    with st.expander("📋 View All Results"):
+        df_data = []
+        for flight in flights:
+            outbound = flight['outbound']
+            return_flight = flight.get('return')
+            df_data.append({
+                'Price': flight['price'],
+                'Currency': flight['currency'],
+                'Airline': outbound['airline'],
+                'Flight #': outbound['flight_number'],
+                'Departure': outbound['departure_time'],
+                'Arrival': outbound['arrival_time'],
+                'Stops': outbound['stops'],
+                'Duration': outbound['duration'],
+                'Return Airline': return_flight['airline'] if return_flight else 'N/A',
+                'Return Flight #': return_flight['flight_number'] if return_flight else 'N/A',
+            })
+        
+        df = pd.DataFrame(df_data)
+        st.dataframe(df, use_container_width=True, height=400)
 
 
 def display_multi_airport_results(flights, airport_routes):
@@ -477,22 +688,201 @@ def display_multi_airport_results(flights, airport_routes):
     
     # Group flights by route for easy comparison
     route_counts = {}
+    route_best_prices = {}
     for flight in flights:
         route = flight.get('search_route', 'Unknown')
         route_counts[route] = route_counts.get(route, 0) + 1
+        # Track cheapest price per route
+        if route not in route_best_prices or flight['price'] < route_best_prices[route]:
+            route_best_prices[route] = flight['price']
     
     # Show route summary
     st.info(f"🛫 Results per route: {', '.join([f'{route}: {count}' for route, count in sorted(route_counts.items())])}")
     
-    # Display flights
-    for i, flight in enumerate(flights, 1):
+    # Statistics
+    prices = [f['price'] for f in flights]
+    currency = flights[0]['currency'] if flights else 'EUR'
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Flights", len(flights))
+    with col2:
+        st.metric("Cheapest", f"{currency} {min(prices):.2f}" if prices else "N/A")
+    with col3:
+        st.metric("Average", f"{currency} {sum(prices)/len(prices):.2f}" if prices else "N/A")
+    with col4:
+        st.metric("Most Expensive", f"{currency} {max(prices):.2f}" if prices else "N/A")
+    
+    # Visualizations for multi-airport comparison
+    st.subheader("📊 Route Comparison Analysis")
+    
+    tab1, tab2, tab3 = st.tabs(["Price by Route", "Price by Departure Time", "Airlines by Route"])
+    
+    with tab1:
+        try:
+            # Create bar chart comparing routes
+            import plotly.graph_objects as go
+            
+            routes = list(route_best_prices.keys())
+            best_prices = [route_best_prices[r] for r in routes]
+            avg_prices = []
+            
+            for route in routes:
+                route_flights = [f for f in flights if f.get('search_route') == route]
+                avg_price = sum(f['price'] for f in route_flights) / len(route_flights)
+                avg_prices.append(avg_price)
+            
+            fig = go.Figure(data=[
+                go.Bar(name='Cheapest', x=routes, y=best_prices, marker_color='lightgreen'),
+                go.Bar(name='Average', x=routes, y=avg_prices, marker_color='lightblue')
+            ])
+            
+            fig.update_layout(
+                title="Price Comparison by Route",
+                xaxis_title="Route",
+                yaxis_title=f"Price ({currency})",
+                barmode='group',
+                height=400
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            st.caption("💡 Compare routes to find the cheapest airport combination")
+        except Exception as e:
+            st.error(f"Error creating route comparison: {str(e)}")
+    
+    with tab2:
+        try:
+            # Create scatter plot: departure time vs price, colored by route
+            import plotly.express as px
+            
+            departure_times = []
+            prices_for_plot = []
+            routes_for_plot = []
+            hover_texts = []
+            
+            for f in flights:
+                outbound = f['outbound']
+                dep_time = outbound.get('departure_time')
+                
+                if dep_time:
+                    # Convert time to decimal hours
+                    if isinstance(dep_time, str):
+                        time_parts = dep_time.split(':')
+                        hours = int(time_parts[0])
+                        minutes = int(time_parts[1]) if len(time_parts) > 1 else 0
+                    else:  # datetime.time object
+                        hours = dep_time.hour
+                        minutes = dep_time.minute
+                    
+                    decimal_hour = hours + minutes / 60
+                    departure_times.append(decimal_hour)
+                    prices_for_plot.append(f['price'])
+                    routes_for_plot.append(f.get('search_route', 'Unknown'))
+                    hover_texts.append(
+                        f"Route: {f.get('search_route', 'Unknown')}<br>"
+                        f"Airline: {outbound['airline']} {outbound['flight_number']}<br>"
+                        f"Departure: {dep_time}<br>"
+                        f"Price: {f['currency']} {f['price']:.2f}"
+                    )
+            
+            if departure_times:
+                fig = px.scatter(
+                    x=departure_times,
+                    y=prices_for_plot,
+                    color=routes_for_plot,
+                    labels={'x': 'Departure Time (hour of day)', 'y': f'Price ({currency})', 'color': 'Route'},
+                    title='Price by Departure Time (All Routes)',
+                    height=400
+                )
+                fig.update_traces(marker=dict(size=12))
+                fig.update_xaxes(
+                    tickmode='linear',
+                    tick0=0,
+                    dtick=2,
+                    tickformat='.0f',
+                    range=[0, 24]
+                )
+                
+                # Update hover text
+                for i, trace in enumerate(fig.data):
+                    trace_indices = [j for j, r in enumerate(routes_for_plot) if r == trace.name]
+                    trace.customdata = [hover_texts[j] for j in trace_indices]
+                    trace.hovertemplate = '%{customdata}<extra></extra>'
+                
+                st.plotly_chart(fig, use_container_width=True)
+                st.caption("💡 See if certain routes have better prices at specific times")
+            else:
+                st.info("Not enough data to create departure time chart")
+        except Exception as e:
+            st.error(f"Error creating departure time chart: {str(e)}")
+    
+    with tab3:
+        try:
+            # Create grouped bar chart: airlines by route
+            import plotly.graph_objects as go
+            from collections import defaultdict
+            
+            # Group by route and airline
+            route_airline_counts = defaultdict(lambda: defaultdict(int))
+            route_airline_prices = defaultdict(lambda: defaultdict(list))
+            
+            for f in flights:
+                route = f.get('search_route', 'Unknown')
+                airline = f['outbound']['airline']
+                route_airline_counts[route][airline] += 1
+                route_airline_prices[route][airline].append(f['price'])
+            
+            # Get all unique airlines
+            all_airlines = set()
+            for route_data in route_airline_counts.values():
+                all_airlines.update(route_data.keys())
+            
+            # Create traces for each airline
+            fig = go.Figure()
+            
+            for airline in sorted(all_airlines):
+                avg_prices_by_route = []
+                routes = sorted(route_airline_counts.keys())
+                
+                for route in routes:
+                    if airline in route_airline_prices[route]:
+                        avg_price = sum(route_airline_prices[route][airline]) / len(route_airline_prices[route][airline])
+                        avg_prices_by_route.append(avg_price)
+                    else:
+                        avg_prices_by_route.append(None)
+                
+                fig.add_trace(go.Bar(
+                    name=airline,
+                    x=routes,
+                    y=avg_prices_by_route
+                ))
+            
+            fig.update_layout(
+                title="Average Price by Airline and Route",
+                xaxis_title="Route",
+                yaxis_title=f"Average Price ({currency})",
+                barmode='group',
+                height=400
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            st.caption("💡 Compare which airlines are cheapest for each route")
+        except Exception as e:
+            st.error(f"Error creating airline comparison: {str(e)}")
+    
+    # Top 5 Best Deals
+    st.subheader("🏆 Top 5 Best Deals")
+    
+    sorted_flights = sorted(flights, key=lambda f: f['price'])[:5]
+    
+    for i, flight in enumerate(sorted_flights, 1):
         route = flight.get('search_route', 'Unknown')
         
         with st.expander(
-            f"💰 {flight['currency']} {flight['price']:.2f} - [{route}] "
+            f"#{i}: {flight['currency']} {flight['price']:.2f} - [{route}] "
             f"{flight['outbound']['airline']} {flight['outbound']['flight_number']}"
             f"{' (Cheapest!)' if i == 1 else ''}",
-            expanded=(i <= 3)
+            expanded=(i <= 2)
         ):
             col1, col2 = st.columns(2)
             
@@ -522,6 +912,28 @@ def display_multi_airport_results(flights, airport_routes):
                     - **Duration:** {return_flight['duration']}<br>
                     """, unsafe_allow_html=True)
             st.markdown(f"**Seats Available:** {flight['number_of_bookable_seats']}")
+    
+    # Full results table
+    with st.expander("📋 View All Flights"):
+        df_data = []
+        for flight in flights:
+            outbound = flight['outbound']
+            return_flight = flight.get('return')
+            df_data.append({
+                'Route': flight.get('search_route', 'Unknown'),
+                'Price': flight['price'],
+                'Currency': flight['currency'],
+                'Outbound': f"{outbound['airline']} {outbound['flight_number']}",
+                'Departure': outbound['departure_time'],
+                'Return': f"{return_flight['airline']} {return_flight['flight_number']}" if return_flight else 'N/A',
+                'Stops': outbound['stops'],
+                'Seats': flight['number_of_bookable_seats']
+            })
+        
+        import pandas as pd
+        df = pd.DataFrame(df_data)
+        df = df.sort_values('Price')
+        st.dataframe(df, use_container_width=True, hide_index=True)
 
 
 def display_date_range_results(results, origin, destination, duration_mode=None):
@@ -696,6 +1108,9 @@ def main():
     with st.sidebar:
         st.markdown("### 🛫 Airports")
         
+        # Get all airport options for dropdown
+        all_airport_options = get_all_airport_options()
+        
         # Multi-airport toggle
         multi_airport = st.checkbox(
             "Compare multiple airports",
@@ -706,48 +1121,67 @@ def main():
         col1, col2 = st.columns(2)
         with col1:
             if multi_airport:
-                origin_input = st.text_area(
-                    "From (comma-separated)",
-                    value="ZRH",
-                    height=80,
-                    help="Enter multiple 3-letter IATA airport codes separated by commas (e.g., ZRH, GVA, BSL)"
-                ).upper()
-                origins = [code.strip() for code in origin_input.split(',') if code.strip()]
+                # Multiselect for multiple origins (no default to avoid conflicts)
+                selected_origins = st.multiselect(
+                    "From (select one or more)",
+                    options=all_airport_options,
+                    default=[],
+                    help="Start typing to search airports by city, country, or code"
+                )
+                # Extract airport codes from selections
+                origins = [opt.split(' - ')[0].strip() for opt in selected_origins] if selected_origins else []
             else:
-                origin = st.text_input(
+                # Selectbox for single origin
+                default_origin = "ZRH - Zurich, Switzerland"
+                selected_origin = st.selectbox(
                     "From",
-                    value="ZRH",
-                    max_chars=3,
-                    help="3-letter IATA airport code"
-                ).upper()
+                    options=all_airport_options,
+                    index=all_airport_options.index(default_origin) if default_origin in all_airport_options else 0,
+                    help="Start typing to search airports"
+                )
+                # Extract airport code from selection
+                origin = selected_origin.split(' - ')[0].strip() if selected_origin else ""
                 origins = [origin] if origin else []
                 
         with col2:
             if multi_airport:
-                destination_input = st.text_area(
-                    "To (comma-separated)",
-                    value="LIS",
-                    height=80,
-                    help="Enter multiple 3-letter IATA airport codes separated by commas (e.g., LIS, OPO, FAO)"
-                ).upper()
-                destinations = [code.strip() for code in destination_input.split(',') if code.strip()]
+                # Multiselect for multiple destinations (no default to avoid conflicts)
+                selected_destinations = st.multiselect(
+                    "To (select one or more)",
+                    options=all_airport_options,
+                    default=[],
+                    help="Start typing to search airports by city, country, or code"
+                )
+                # Extract airport codes from selections
+                destinations = [opt.split(' - ')[0].strip() for opt in selected_destinations] if selected_destinations else []
             else:
-                destination = st.text_input(
+                # Selectbox for single destination
+                default_destination = "LIS - Lisbon, Portugal"
+                selected_destination = st.selectbox(
                     "To",
-                    value="LIS",
-                    max_chars=3,
-                    help="3-letter IATA airport code"
-                ).upper()
+                    options=all_airport_options,
+                    index=all_airport_options.index(default_destination) if default_destination in all_airport_options else 0,
+                    help="Start typing to search airports"
+                )
+                # Extract airport code from selection
+                destination = selected_destination.split(' - ')[0].strip() if selected_destination else ""
                 destinations = [destination] if destination else []
         
-        # Show airport combination count
-        if multi_airport and origins and destinations:
-            num_combinations = len(origins) * len(destinations)
-            if num_combinations > 1:
-                st.info(f"🔄 Will search {num_combinations} airport combination{'s' if num_combinations > 1 else ''}: "
-                       f"{len(origins)} origin × {len(destinations)} destination")
-                if num_combinations > 10:
-                    st.warning("⚠️ Searching many airports will use more API calls and take longer!")
+        # Show airport combination count and validation
+        if multi_airport:
+            if not origins or not destinations:
+                st.warning("⚠️ Please select at least one origin and one destination airport")
+            elif origins and destinations:
+                num_combinations = len(origins) * len(destinations)
+                if num_combinations > 1:
+                    st.info(f"🔄 Will search {num_combinations} airport combination{'s' if num_combinations > 1 else ''}: "
+                           f"{len(origins)} origin × {len(destinations)} destination")
+                    if num_combinations > 10:
+                        st.warning("⚠️ Searching many airports will use more API calls and take longer!")
+                else:
+                    st.info(f"✈️ Searching {origins[0]} → {destinations[0]}")
+        elif not origins or not destinations:
+            st.warning("⚠️ Please select origin and destination airports")
     
     # Mode-specific UI
     if search_mode == "💡 Flexible Dates (Date Range)":

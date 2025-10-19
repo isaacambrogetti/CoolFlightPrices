@@ -347,21 +347,14 @@ def create_price_by_duration(results: List[SearchResult]) -> go.Figure:
     try:
         currency = valid_results[0].currency
         
-        # Prepare data with validation
+        # Prepare data
         durations = []
         prices = []
-        hover_text = []
         
         for r in valid_results:
             try:
                 durations.append(int(r.total_duration))
                 prices.append(float(r.cheapest_price))
-                hover_text.append(
-                    f"{r.departure_date.strftime('%b %d')} → {r.return_date.strftime('%b %d')}<br>"
-                    f"Duration: {r.total_duration} days<br>"
-                    f"Days at destination: {r.days_at_destination}<br>"
-                    f"Price: {currency} {r.cheapest_price:.2f}"
-                )
             except (ValueError, TypeError, AttributeError):
                 # Skip invalid entries
                 continue
@@ -396,9 +389,7 @@ def create_price_by_duration(results: List[SearchResult]) -> go.Figure:
             colorscale='RdYlGn_r',
             showscale=True,
             colorbar=dict(title=f"Price ({currency})")
-        ),
-        text=hover_text,
-        hovertemplate='%{text}<extra></extra>'
+        )
     ))
     
     fig.update_layout(
@@ -406,7 +397,12 @@ def create_price_by_duration(results: List[SearchResult]) -> go.Figure:
         xaxis_title="Total Trip Duration (days)",
         yaxis_title=f"Price ({currency})",
         height=450,
-        showlegend=False
+        showlegend=False,
+        xaxis=dict(
+            tickmode='linear',
+            tick0=1,
+            dtick=1  # Show only integer days
+        )
     )
     
     return fig

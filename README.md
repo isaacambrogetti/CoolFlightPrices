@@ -17,9 +17,16 @@ An advanced flight price comparison tool that extends the original [FlightsPlot]
 - **Flexible Date Search**: Compare prices across date ranges (up to hundreds of combinations)
 - **Multi-Airport Search**: Compare multiple origin/destination airports simultaneously
 
+#### ✈️ Intelligent Airport Selection
+- **Searchable Dropdown**: Type city, country, or code to find airports instantly
+- **60+ Airports**: Coverage across Europe, North America, and popular destinations
+- **Multi-Select**: Easy chip-based selection for comparing multiple airports
+- **No Code Memorization**: User-friendly "ZRH - Zurich, Switzerland" format
+
 #### 📊 Interactive Visualizations
 - **Price Heatmap**: Visual calendar showing cheapest days to fly
-- **Price Distribution**: Histogram of price ranges across all combinations
+- **Price by Time**: See how departure/return times affect prices
+- **Stops Analysis**: Compare direct flights vs connections
 - **Duration vs Price**: Scatter plot showing trip length trade-offs
 - **Calendar View**: Bar chart of best prices per departure date
 
@@ -83,12 +90,14 @@ streamlit run src/ui/app.py
 ### Single Date Search
 Perfect for specific travel plans:
 ```
-From: ZRH
-To: LIS
+From: ZRH - Zurich, Switzerland (searchable dropdown)
+To: LIS - Lisbon, Portugal (type to filter)
 Departure: 2025-12-15
 Return: 2025-12-22
 → Find best flights for these exact dates
 ```
+
+**💡 New**: Just type "zur" or "lisbon" - no need to remember airport codes!
 
 ### Flexible Date Search
 When you have date flexibility:

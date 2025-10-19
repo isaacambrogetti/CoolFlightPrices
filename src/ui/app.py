@@ -34,6 +34,8 @@ from src.visualization.heatmap import (
     create_airport_price_comparison
 )
 from src.utils.airport_search import search_airports, parse_airport_input, get_airport_display_name, get_all_airport_options
+from src.price_tracking.database import PriceTrackingDB
+from src.price_tracking.tracker_ui import display_tracker_tab
 from config.settings import Config
 
 
@@ -44,6 +46,35 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+
+def display_track_button(flight: dict, index: int) -> bool:
+    """
+    Display a track price button for a flight
+    
+    Args:
+        flight: Flight dictionary
+        index: Unique index for the button
+        
+    Returns:
+        True if button was clicked, False otherwise
+    """
+    db = PriceTrackingDB()
+    is_tracked = db.is_tracked(flight)
+    
+    if is_tracked:
+        if st.button("✅ Tracked", key=f"track_{index}", disabled=True, use_container_width=True, type="secondary"):
+            return False
+    else:
+        if st.button("📊 Track Price", key=f"track_{index}", use_container_width=True, type="primary"):
+            try:
+                db.add_tracked_flight(flight, flight['price'], flight['currency'])
+                st.success("✅ Flight added to tracker!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error adding flight to tracker: {str(e)}")
+            return True
+    return False
 
 
 def check_api_credentials():
@@ -485,6 +516,10 @@ def display_single_search_results(flights, origin, destination):
                     """, unsafe_allow_html=True)
             
             st.markdown(f"**Seats Available:** {flight['number_of_bookable_seats']}")
+            
+            # Add track price button
+            st.markdown("---")
+            display_track_button(flight, f"single_{i}")
     
     # Visualizations
     st.subheader("📊 Price Analysis")
@@ -912,6 +947,10 @@ def display_multi_airport_results(flights, airport_routes):
                     - **Duration:** {return_flight['duration']}<br>
                     """, unsafe_allow_html=True)
             st.markdown(f"**Seats Available:** {flight['number_of_bookable_seats']}")
+            
+            # Add track price button
+            st.markdown("---")
+            display_track_button(flight, f"multi_{i}")
     
     # Full results table
     with st.expander("📋 View All Flights"):
@@ -1008,6 +1047,10 @@ def display_date_range_results(results, origin, destination, duration_mode=None)
                     if flight['return']:
                         ret = flight['return']
                         st.markdown(f"- Return: {get_airline_logo_html(ret['airline'])}<b>{ret['airline']}</b> {ret['flight_number']} at {ret['departure_time']}", unsafe_allow_html=True)
+                    
+                    # Add track price button for the cheapest flight
+                    st.markdown("---")
+                    display_track_button(result.cheapest_flight, f"flex_{i}")
     
     # Visualizations
     st.subheader("📊 Price Analysis")
@@ -1088,11 +1131,22 @@ def main():
     
     # Header
     st.title("✈️ CoolFlightPrices")
-    st.markdown("*Find the best flight deals across flexible dates*")
+    st.markdown("*Find the best flight deals and track prices over time*")
     
     # Check credentials
     if not check_api_credentials():
         st.stop()
+    
+    # Page selection in sidebar
+    page = st.sidebar.radio(
+        "Navigate",
+        ["🔍 Search Flights", "📊 Price Tracker"],
+        label_visibility="collapsed"
+    )
+    
+    if page == "📊 Price Tracker":
+        display_tracker_tab()
+        return
     
     # Sidebar for search parameters
     st.sidebar.header("🔍 Search Flights")

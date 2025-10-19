@@ -6,9 +6,25 @@ Manages flight tracking data with price history and visualization support.
 
 import json
 import os
+import logging
 from datetime import datetime
 from typing import Dict, List, Optional
 from pathlib import Path
+
+# Set up logging
+log_dir = Path(__file__).parent.parent.parent / 'logs'
+log_dir.mkdir(exist_ok=True)
+log_file = log_dir / 'price_tracking.log'
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file),
+        logging.StreamHandler()  # Also output to console
+    ]
+)
+logger = logging.getLogger('PriceTracking')
 
 
 class PriceTrackingDB:
@@ -305,16 +321,19 @@ class PriceTrackingDB:
             now = datetime.now()
             hours_since = (now - last_checked_dt).total_seconds() / 3600
             
-            # Debug: Print the time difference
-            print(f"DEBUG: Flight {flight_id}")
-            print(f"  Last checked: {last_checked_dt}")
-            print(f"  Now: {now}")
-            print(f"  Hours since: {hours_since:.2f}")
-            print(f"  Needs update: {hours_since >= hours_threshold}")
+            needs_update = hours_since >= hours_threshold
             
-            return hours_since >= hours_threshold
+            # Log the time check
+            logger.info(
+                f"Price update check - Flight: {flight_id[:30]}... | "
+                f"Last checked: {hours_since:.2f}h ago | "
+                f"Threshold: {hours_threshold}h | "
+                f"Needs update: {needs_update}"
+            )
+            
+            return needs_update
         except Exception as e:
-            print(f"DEBUG: Error parsing timestamp for {flight_id}: {e}")
+            logger.warning(f"Error parsing timestamp for {flight_id}: {e} - Will update as safety measure")
             return True  # If there's any error parsing, assume needs update
     
     def refresh_flight_price(self, flight_id: str, client) -> dict:
@@ -330,7 +349,11 @@ class PriceTrackingDB:
         """
         flight_data = self.get_flight(flight_id)
         if not flight_data:
+            logger.error(f"Refresh failed - Flight not found: {flight_id}")
             return {'success': False, 'message': 'Flight not found', 'error': 'NOT_FOUND'}
+        
+        route = f"{flight_data['origin']}→{flight_data['destination']}"
+        logger.info(f"Refreshing price for {route} (Dep: {flight_data['departure_date']})")
         
         try:
             # Parse dates for API call
@@ -358,6 +381,12 @@ class PriceTrackingDB:
                 change = new_price - old_price
                 change_pct = (change / old_price * 100) if old_price > 0 else 0
                 
+                logger.info(
+                    f"Price updated for {route}: "
+                    f"{old_price:.2f} → {new_price:.2f} "
+                    f"({change:+.2f}, {change_pct:+.1f}%)"
+                )
+                
                 return {
                     'success': True,
                     'new_price': new_price,
@@ -367,6 +396,7 @@ class PriceTrackingDB:
                     'message': f'Price updated: {old_price:.2f} → {new_price:.2f}'
                 }
             else:
+                logger.warning(f"No flights found for {route} on {dep_date}")
                 return {
                     'success': False, 
                     'message': 'No flights found for this route/date',
@@ -374,6 +404,7 @@ class PriceTrackingDB:
                 }
         
         except Exception as e:
+            logger.error(f"API error refreshing {route}: {str(e)}")
             return {
                 'success': False, 
                 'message': f'Error: {str(e)}',
@@ -393,6 +424,8 @@ class PriceTrackingDB:
             dict with summary of refresh operation
         """
         tracked_flights = self.get_tracked_flights()
+        logger.info(f"Starting batch refresh - {len(tracked_flights)} tracked flights, {hours_threshold}h threshold")
+        
         results = {
             'total': len(tracked_flights),
             'checked': 0,
@@ -419,5 +452,12 @@ class PriceTrackingDB:
                 })
             else:
                 results['skipped'] += 1
+        
+        logger.info(
+            f"Batch refresh complete - "
+            f"Updated: {results['updated']}, "
+            f"Failed: {results['failed']}, "
+            f"Skipped: {results['skipped']}"
+        )
         
         return results

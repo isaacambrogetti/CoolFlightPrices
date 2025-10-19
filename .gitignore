@@ -49,6 +49,7 @@ secrets.json
 # Logs
 *.log
 logs/
+logs/
 
 # Output files
 output/

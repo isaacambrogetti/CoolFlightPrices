@@ -111,6 +111,8 @@ class PriceTrackingDB:
         ret_date = return_flight.get('departure_date') if return_flight else None
         ret_date_str = str(ret_date) if ret_date else None
         
+        now = datetime.now().isoformat()
+        
         flight_data = {
             'origin': outbound.get('origin'),
             'destination': outbound.get('destination'),
@@ -124,10 +126,11 @@ class PriceTrackingDB:
             'initial_price': current_price,
             'latest_price': current_price,
             'currency': currency,
-            'added_date': datetime.now().isoformat(),
+            'added_date': now,
+            'last_checked': now,  # Track when price was last updated
             'price_history': [
                 {
-                    'timestamp': datetime.now().isoformat(),
+                    'timestamp': now,
                     'price': current_price
                 }
             ]
@@ -161,6 +164,7 @@ class PriceTrackingDB:
             'price': price
         })
         flight['latest_price'] = price
+        flight['last_checked'] = timestamp  # Update last checked time
         
         self._save_db(db)
     
@@ -275,3 +279,134 @@ class PriceTrackingDB:
             'with_price_increases': price_increases,
             'average_price_change_pct': avg_change
         }
+    
+    def needs_price_update(self, flight_id: str, hours_threshold: int = 24) -> bool:
+        """
+        Check if a flight's price needs updating
+        
+        Args:
+            flight_id: Unique flight identifier
+            hours_threshold: Hours since last check before update needed
+            
+        Returns:
+            True if price should be refreshed, False otherwise
+        """
+        flight_data = self.get_flight(flight_id)
+        if not flight_data:
+            return False
+        
+        last_checked = flight_data.get('last_checked')
+        if not last_checked:
+            return True  # No last_checked means old data, needs update
+        
+        try:
+            last_checked_dt = datetime.fromisoformat(last_checked)
+            hours_since = (datetime.now() - last_checked_dt).total_seconds() / 3600
+            return hours_since >= hours_threshold
+        except:
+            return True  # If there's any error parsing, assume needs update
+    
+    def refresh_flight_price(self, flight_id: str, client) -> dict:
+        """
+        Fetch current price for a tracked flight and update history
+        
+        Args:
+            flight_id: Unique flight identifier
+            client: AmadeusClient instance for API calls
+            
+        Returns:
+            dict with 'success', 'new_price', 'old_price', 'message', 'error'
+        """
+        flight_data = self.get_flight(flight_id)
+        if not flight_data:
+            return {'success': False, 'message': 'Flight not found', 'error': 'NOT_FOUND'}
+        
+        try:
+            # Parse dates for API call
+            from datetime import datetime as dt
+            dep_date = dt.fromisoformat(flight_data['departure_date']).date() if flight_data.get('departure_date') else None
+            ret_date = dt.fromisoformat(flight_data['return_date']).date() if flight_data.get('return_date') else None
+            
+            # Search for current price
+            results = client.get_cheapest_flights(
+                origin=flight_data['origin'],
+                destination=flight_data['destination'],
+                departure_date=dep_date,
+                return_date=ret_date,
+                adults=1,
+                max_results=1
+            )
+            
+            if results and len(results) > 0:
+                new_price = results[0]['price']
+                old_price = flight_data['latest_price']
+                
+                # Add new price point
+                self.add_price_point(flight_id, new_price)
+                
+                change = new_price - old_price
+                change_pct = (change / old_price * 100) if old_price > 0 else 0
+                
+                return {
+                    'success': True,
+                    'new_price': new_price,
+                    'old_price': old_price,
+                    'change': change,
+                    'change_pct': change_pct,
+                    'message': f'Price updated: {old_price:.2f} → {new_price:.2f}'
+                }
+            else:
+                return {
+                    'success': False, 
+                    'message': 'No flights found for this route/date',
+                    'error': 'NO_FLIGHTS'
+                }
+        
+        except Exception as e:
+            return {
+                'success': False, 
+                'message': f'Error: {str(e)}',
+                'error': 'API_ERROR',
+                'details': str(e)
+            }
+    
+    def refresh_all_stale_prices(self, client, hours_threshold: int = 24) -> dict:
+        """
+        Refresh prices for all flights that haven't been updated recently
+        
+        Args:
+            client: AmadeusClient instance
+            hours_threshold: Hours since last check before refresh
+            
+        Returns:
+            dict with summary of refresh operation
+        """
+        tracked_flights = self.get_tracked_flights()
+        results = {
+            'total': len(tracked_flights),
+            'checked': 0,
+            'updated': 0,
+            'failed': 0,
+            'skipped': 0,
+            'details': []
+        }
+        
+        for flight_id, flight_data in tracked_flights.items():
+            if self.needs_price_update(flight_id, hours_threshold):
+                results['checked'] += 1
+                result = self.refresh_flight_price(flight_id, client)
+                
+                if result['success']:
+                    results['updated'] += 1
+                else:
+                    results['failed'] += 1
+                
+                results['details'].append({
+                    'flight_id': flight_id,
+                    'route': f"{flight_data['origin']}→{flight_data['destination']}",
+                    **result
+                })
+            else:
+                results['skipped'] += 1
+        
+        return results

@@ -32,6 +32,71 @@ def display_tracker_tab():
         """)
         return
     
+    # Add refresh controls at the top
+    col_left, col_center, col_right = st.columns([2, 1, 1])
+    
+    with col_center:
+        # Check if any prices need updating
+        stale_count = sum(1 for fid in tracked_flights.keys() if db.needs_price_update(fid, hours_threshold=24))
+        
+        if stale_count > 0:
+            st.info(f"🕐 {stale_count} flight(s) need price update")
+    
+    with col_right:
+        manual_refresh = st.button("🔄 Refresh All Prices", use_container_width=True, type="primary")
+    
+    # Auto-refresh stale prices on page load (once per session)
+    if 'auto_refresh_done' not in st.session_state:
+        st.session_state.auto_refresh_done = False
+    
+    # Perform auto-refresh if needed
+    if not st.session_state.auto_refresh_done and stale_count > 0:
+        with st.spinner(f"🔄 Auto-updating {stale_count} stale price(s)..."):
+            from src.api.amadeus_client import AmadeusClient
+            try:
+                client = AmadeusClient()
+                results = db.refresh_all_stale_prices(client, hours_threshold=24)
+                
+                if results['updated'] > 0:
+                    st.success(f"✅ Auto-updated {results['updated']} flight price(s)")
+                if results['failed'] > 0:
+                    st.warning(f"⚠️ Failed to update {results['failed']} flight(s)")
+                
+                st.session_state.auto_refresh_done = True
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Auto-refresh error: {str(e)}")
+                st.session_state.auto_refresh_done = True
+    
+    # Manual refresh all prices
+    if manual_refresh:
+        with st.spinner("🔄 Refreshing all flight prices..."):
+            from src.api.amadeus_client import AmadeusClient
+            try:
+                client = AmadeusClient()
+                results = {
+                    'total': len(tracked_flights),
+                    'updated': 0,
+                    'failed': 0,
+                    'details': []
+                }
+                
+                for flight_id in tracked_flights.keys():
+                    result = db.refresh_flight_price(flight_id, client)
+                    if result['success']:
+                        results['updated'] += 1
+                    else:
+                        results['failed'] += 1
+                    results['details'].append(result)
+                
+                st.success(f"✅ Updated {results['updated']}/{results['total']} flights")
+                if results['failed'] > 0:
+                    st.warning(f"⚠️ {results['failed']} flight(s) failed to update")
+                
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Refresh error: {str(e)}")
+    
     # Show statistics
     stats = db.get_stats()
     col1, col2, col3, col4 = st.columns(4)
@@ -106,6 +171,24 @@ def display_tracker_tab():
                 st.markdown(f"- **Initial:** {flight_data['currency']} {flight_data['initial_price']:.2f}")
                 st.markdown(f"- **Current:** {flight_data['currency']} {flight_data['latest_price']:.2f}")
                 st.markdown(f"- **Change:** {flight_data['currency']} {price_change:+.2f} ({price_change_pct:+.1f}%)")
+                
+                # Show last checked time
+                if flight_data.get('last_checked'):
+                    try:
+                        last_checked_dt = datetime.fromisoformat(flight_data['last_checked'])
+                        hours_ago = (datetime.now() - last_checked_dt).total_seconds() / 3600
+                        
+                        if hours_ago < 1:
+                            time_str = f"{int(hours_ago * 60)} minutes ago"
+                        elif hours_ago < 24:
+                            time_str = f"{int(hours_ago)} hours ago"
+                        else:
+                            days_ago = int(hours_ago / 24)
+                            time_str = f"{days_ago} day{'s' if days_ago > 1 else ''} ago"
+                        
+                        st.markdown(f"- **Last checked:** {time_str}")
+                    except:
+                        pass
                 
                 price_history = flight_data['price_history']
                 if len(price_history) > 1:

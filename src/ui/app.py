@@ -48,13 +48,13 @@ st.set_page_config(
 )
 
 
-def display_track_button(flight: dict, index: int) -> bool:
+def display_track_button(flight: dict, index) -> bool:
     """
     Display a track price button for a flight
     
     Args:
         flight: Flight dictionary
-        index: Unique index for the button
+        index: Unique index/identifier for the button (can be int or str)
         
     Returns:
         True if button was clicked, False otherwise

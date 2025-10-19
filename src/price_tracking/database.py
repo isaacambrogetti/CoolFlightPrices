@@ -70,9 +70,18 @@ class PriceTrackingDB:
         airline = outbound.get('airline', 'UNK')
         flight_num = outbound.get('flight_number', '0000')
         
-        # Clean dates (remove hyphens)
-        dep_date_clean = dep_date.replace('-', '') if dep_date else '00000000'
-        ret_date_clean = ret_date.replace('-', '') if ret_date != 'OW' else 'OW'
+        # Clean dates (remove hyphens) - convert to string first if needed
+        if dep_date:
+            dep_date_str = str(dep_date)  # Convert date object to string
+            dep_date_clean = dep_date_str.replace('-', '')
+        else:
+            dep_date_clean = '00000000'
+            
+        if ret_date != 'OW':
+            ret_date_str = str(ret_date)  # Convert date object to string
+            ret_date_clean = ret_date_str.replace('-', '')
+        else:
+            ret_date_clean = 'OW'
         
         return f"{origin}_{destination}_{dep_date_clean}_{ret_date_clean}_{airline}_{flight_num}"
     

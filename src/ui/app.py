@@ -50,7 +50,7 @@ st.set_page_config(
 
 def display_track_button(flight: dict, index) -> bool:
     """
-    Display a track price button for a flight
+    Display a track price button for a flight (toggle on/off)
     
     Args:
         flight: Flight dictionary
@@ -60,20 +60,34 @@ def display_track_button(flight: dict, index) -> bool:
         True if button was clicked, False otherwise
     """
     db = PriceTrackingDB()
+    flight_id = db.generate_flight_id(flight)
     is_tracked = db.is_tracked(flight)
     
     if is_tracked:
-        st.button("✅ Tracking", key=f"track_{index}", disabled=True, use_container_width=True, type="secondary")
+        # Show "Untrack" button - clickable to remove from tracking
+        if st.button("✅ Tracking (click to untrack)", key=f"track_{index}", use_container_width=True, type="secondary"):
+            try:
+                db.remove_tracked_flight(flight_id)
+                st.success("🗑️ Flight removed from tracker!")
+                # Remove from session state
+                if 'tracked_flights' in st.session_state and flight_id in st.session_state.tracked_flights:
+                    st.session_state.tracked_flights.remove(flight_id)
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Error removing flight from tracker: {str(e)}")
+                import traceback
+                st.error(f"Details: {traceback.format_exc()}")
+            return True
         return False
     else:
+        # Show "Track Price" button - clickable to add to tracking
         if st.button("📊 Track Price", key=f"track_{index}", use_container_width=True, type="primary"):
             try:
                 db.add_tracked_flight(flight, flight['price'], flight['currency'])
                 st.success("✅ Flight added to tracker! You can continue tracking more flights or check the 📊 Price Tracker page.")
-                # DON'T rerun - just mark as tracked in session state to update button
+                # Mark as tracked in session state to update button
                 if 'tracked_flights' not in st.session_state:
                     st.session_state.tracked_flights = set()
-                flight_id = db.generate_flight_id(flight)
                 st.session_state.tracked_flights.add(flight_id)
                 st.rerun()
             except Exception as e:
@@ -81,7 +95,7 @@ def display_track_button(flight: dict, index) -> bool:
                 import traceback
                 st.error(f"Details: {traceback.format_exc()}")
             return True
-    return False
+        return False
 
 
 def check_api_credentials():

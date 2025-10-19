@@ -297,13 +297,24 @@ class PriceTrackingDB:
         
         last_checked = flight_data.get('last_checked')
         if not last_checked:
-            return True  # No last_checked means old data, needs update
+            # No last_checked means old data from before this feature
+            return True
         
         try:
             last_checked_dt = datetime.fromisoformat(last_checked)
-            hours_since = (datetime.now() - last_checked_dt).total_seconds() / 3600
+            now = datetime.now()
+            hours_since = (now - last_checked_dt).total_seconds() / 3600
+            
+            # Debug: Print the time difference
+            print(f"DEBUG: Flight {flight_id}")
+            print(f"  Last checked: {last_checked_dt}")
+            print(f"  Now: {now}")
+            print(f"  Hours since: {hours_since:.2f}")
+            print(f"  Needs update: {hours_since >= hours_threshold}")
+            
             return hours_since >= hours_threshold
-        except:
+        except Exception as e:
+            print(f"DEBUG: Error parsing timestamp for {flight_id}: {e}")
             return True  # If there's any error parsing, assume needs update
     
     def refresh_flight_price(self, flight_id: str, client) -> dict:

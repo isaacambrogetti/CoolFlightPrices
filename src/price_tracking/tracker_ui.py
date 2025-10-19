@@ -40,16 +40,19 @@ def display_tracker_tab():
         stale_count = sum(1 for fid in tracked_flights.keys() if db.needs_price_update(fid, hours_threshold=24))
         
         if stale_count > 0:
-            st.info(f"🕐 {stale_count} flight(s) need price update")
+            st.info(f"🕐 {stale_count} flight(s) need price update (>24h old)")
+        else:
+            st.success("✅ All prices are fresh (<24h old)")
     
     with col_right:
-        manual_refresh = st.button("🔄 Refresh All Prices", use_container_width=True, type="primary")
+        manual_refresh = st.button("🔄 Force Refresh All", use_container_width=True, type="secondary",
+                                   help="Refresh all flights regardless of when they were last checked")
     
     # Auto-refresh stale prices on page load (once per session)
     if 'auto_refresh_done' not in st.session_state:
         st.session_state.auto_refresh_done = False
     
-    # Perform auto-refresh if needed
+    # Perform auto-refresh if needed (only for stale prices >24h)
     if not st.session_state.auto_refresh_done and stale_count > 0:
         with st.spinner(f"🔄 Auto-updating {stale_count} stale price(s)..."):
             from src.api.amadeus_client import AmadeusClient

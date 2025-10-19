@@ -9,4 +9,4 @@
     - Carbon footprint calculations
     - Hotel price integration
     - Rental car comparison
-
+- Change how the airports are written once selected, I don't want to have the country too, just the name of the city and the code of the airport in this format 'Zurich (ZRH)' so that it's more readable for the user and doesn't require a bigger text area

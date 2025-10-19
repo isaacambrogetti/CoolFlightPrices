@@ -104,15 +104,22 @@ class PriceTrackingDB:
         outbound = flight['outbound']
         return_flight = flight.get('return')
         
+        # Convert date objects to strings for JSON serialization
+        dep_date = outbound.get('departure_date')
+        dep_date_str = str(dep_date) if dep_date else None
+        
+        ret_date = return_flight.get('departure_date') if return_flight else None
+        ret_date_str = str(ret_date) if ret_date else None
+        
         flight_data = {
             'origin': outbound.get('origin'),
             'destination': outbound.get('destination'),
-            'departure_date': outbound.get('departure_date'),
-            'return_date': return_flight.get('departure_date') if return_flight else None,
+            'departure_date': dep_date_str,
+            'return_date': ret_date_str,
             'airline': outbound.get('airline'),
-            'flight_number': outbound.get('flight_number'),
+            'flight_number': str(outbound.get('flight_number', '')),
             'return_airline': return_flight.get('airline') if return_flight else None,
-            'return_flight_number': return_flight.get('flight_number') if return_flight else None,
+            'return_flight_number': str(return_flight.get('flight_number', '')) if return_flight else None,
             'is_roundtrip': flight.get('return') is not None,
             'initial_price': current_price,
             'latest_price': current_price,

@@ -34,6 +34,8 @@ from src.visualization.heatmap import (
     create_airport_price_comparison
 )
 from src.utils.airport_search import search_airports, parse_airport_input, get_airport_display_name, get_all_airport_options
+from src.price_tracking.database import PriceTrackingDB
+from src.price_tracking.tracker_ui import display_tracker_tab
 from config.settings import Config
 
 
@@ -44,6 +46,56 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+
+def display_track_button(flight: dict, index) -> bool:
+    """
+    Display a track price button for a flight (toggle on/off)
+    
+    Args:
+        flight: Flight dictionary
+        index: Unique index/identifier for the button (can be int or str)
+        
+    Returns:
+        True if button was clicked, False otherwise
+    """
+    db = PriceTrackingDB()
+    flight_id = db.generate_flight_id(flight)
+    is_tracked = db.is_tracked(flight)
+    
+    if is_tracked:
+        # Show "Untrack" button - clickable to remove from tracking
+        if st.button("✅ Tracking (click to untrack)", key=f"track_{index}", use_container_width=True, type="secondary"):
+            try:
+                db.remove_tracked_flight(flight_id)
+                st.success("🗑️ Flight removed from tracker!")
+                # Remove from session state
+                if 'tracked_flights' in st.session_state and flight_id in st.session_state.tracked_flights:
+                    st.session_state.tracked_flights.remove(flight_id)
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Error removing flight from tracker: {str(e)}")
+                import traceback
+                st.error(f"Details: {traceback.format_exc()}")
+            return True
+        return False
+    else:
+        # Show "Track Price" button - clickable to add to tracking
+        if st.button("📊 Track Price", key=f"track_{index}", use_container_width=True, type="primary"):
+            try:
+                db.add_tracked_flight(flight, flight['price'], flight['currency'])
+                st.success("✅ Flight added to tracker! You can continue tracking more flights or check the 📊 Price Tracker page.")
+                # Mark as tracked in session state to update button
+                if 'tracked_flights' not in st.session_state:
+                    st.session_state.tracked_flights = set()
+                st.session_state.tracked_flights.add(flight_id)
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Error adding flight to tracker: {str(e)}")
+                import traceback
+                st.error(f"Details: {traceback.format_exc()}")
+            return True
+        return False
 
 
 def check_api_credentials():
@@ -485,6 +537,10 @@ def display_single_search_results(flights, origin, destination):
                     """, unsafe_allow_html=True)
             
             st.markdown(f"**Seats Available:** {flight['number_of_bookable_seats']}")
+            
+            # Add track price button
+            st.markdown("---")
+            display_track_button(flight, f"single_{i}")
     
     # Visualizations
     st.subheader("📊 Price Analysis")
@@ -912,6 +968,10 @@ def display_multi_airport_results(flights, airport_routes):
                     - **Duration:** {return_flight['duration']}<br>
                     """, unsafe_allow_html=True)
             st.markdown(f"**Seats Available:** {flight['number_of_bookable_seats']}")
+            
+            # Add track price button
+            st.markdown("---")
+            display_track_button(flight, f"multi_{i}")
     
     # Full results table
     with st.expander("📋 View All Flights"):
@@ -1008,6 +1068,10 @@ def display_date_range_results(results, origin, destination, duration_mode=None)
                     if flight['return']:
                         ret = flight['return']
                         st.markdown(f"- Return: {get_airline_logo_html(ret['airline'])}<b>{ret['airline']}</b> {ret['flight_number']} at {ret['departure_time']}", unsafe_allow_html=True)
+                    
+                    # Add track price button for the cheapest flight
+                    st.markdown("---")
+                    display_track_button(result.cheapest_flight, f"flex_{i}")
     
     # Visualizations
     st.subheader("📊 Price Analysis")
@@ -1088,11 +1152,22 @@ def main():
     
     # Header
     st.title("✈️ CoolFlightPrices")
-    st.markdown("*Find the best flight deals across flexible dates*")
+    st.markdown("*Find the best flight deals and track prices over time*")
     
     # Check credentials
     if not check_api_credentials():
         st.stop()
+    
+    # Page selection in sidebar
+    page = st.sidebar.radio(
+        "Navigate",
+        ["🔍 Search Flights", "📊 Price Tracker"],
+        label_visibility="collapsed"
+    )
+    
+    if page == "📊 Price Tracker":
+        display_tracker_tab()
+        return
     
     # Sidebar for search parameters
     st.sidebar.header("🔍 Search Flights")
@@ -1195,6 +1270,12 @@ def main():
     
     # Main content area
     if search_button:
+        # Store search parameters in session state
+        st.session_state.last_search_mode = search_mode
+        st.session_state.last_origins = origins
+        st.session_state.last_destinations = destinations
+        st.session_state.last_airport_routes = [(orig, dest) for orig in origins for dest in destinations]
+        
         # Validate inputs
         if not origins:
             st.error("Please enter at least one origin airport code")
@@ -1217,7 +1298,7 @@ def main():
             st.stop()
         
         # Create airport route combinations
-        airport_routes = [(orig, dest) for orig in origins for dest in destinations]
+        airport_routes = st.session_state.last_airport_routes
         
         try:
             client = AmadeusClient()
@@ -1337,6 +1418,8 @@ def main():
                     all_results = filtered_results
                 
                 # Display results (handles both single and multi-airport)
+                st.session_state.search_results = all_results
+                st.session_state.search_params = params
                 display_date_range_results(all_results, None, None, params.get('duration_mode'))
                 
             else:
@@ -1403,6 +1486,14 @@ def main():
                 # Sort by price
                 all_flights.sort(key=lambda f: f['price'])
                 
+                # Store results in session state
+                st.session_state.search_results = all_flights
+                st.session_state.single_search_params = {
+                    'departure_date': departure_date,
+                    'return_date': return_date,
+                    'adults': adults
+                }
+                
                 # Display results
                 if len(airport_routes) == 1:
                     display_single_search_results(all_flights, origins[0], destinations[0])
@@ -1418,6 +1509,51 @@ def main():
             - Check if you've exceeded your API quota
             - Try different dates or airports
             """)
+    
+    elif 'search_results' in st.session_state and st.session_state.search_results:
+        # Display previously stored search results after rerun
+        if st.session_state.last_search_mode == "💡 Flexible Dates (Date Range)":
+            # Re-display flexible date results
+            all_results = st.session_state.search_results
+            params = st.session_state.search_params
+            airport_routes = st.session_state.last_airport_routes
+            origins = st.session_state.last_origins
+            destinations = st.session_state.last_destinations
+            
+            if len(airport_routes) == 1:
+                st.subheader(f"📊 Flexible Date Search: {origins[0]} → {destinations[0]}")
+            else:
+                st.subheader(f"📊 Flexible Date Search: {len(origins)} origin(s) × {len(destinations)} destination(s)")
+                st.caption(f"Comparing: {', '.join([f'{o}→{d}' for o, d in airport_routes])}")
+            
+            st.info("✅ Showing previous search results. Change search criteria and click search to update.")
+            display_date_range_results(all_results, None, None, params.get('duration_mode'))
+        else:
+            # Re-display single date results
+            all_flights = st.session_state.search_results
+            single_params = st.session_state.single_search_params
+            airport_routes = st.session_state.last_airport_routes
+            origins = st.session_state.last_origins
+            destinations = st.session_state.last_destinations
+            
+            if len(airport_routes) == 1:
+                st.subheader("Search Results")
+                st.markdown(f"""
+                **Route:** {origins[0]} → {destinations[0]}  
+                **Departure:** {single_params['departure_date']}  
+                {"**Return:** " + str(single_params['return_date']) if single_params['return_date'] else "**Trip Type:** One-way"}  
+                **Passengers:** {single_params['adults']} adult(s)
+                """)
+            else:
+                st.subheader(f"Search Results: {len(airport_routes)} Route(s)")
+                st.caption(f"Comparing: {', '.join([f'{o}→{d}' for o, d in airport_routes])}")
+            
+            st.info("✅ Showing previous search results. Change search criteria and click search to update.")
+            
+            if len(airport_routes) == 1:
+                display_single_search_results(all_flights, origins[0], destinations[0])
+            else:
+                display_multi_airport_results(all_flights, airport_routes)
     
     else:
         # Welcome message

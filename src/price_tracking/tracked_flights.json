@@ -1,0 +1,88 @@
+{
+  "tracked_flights": {
+    "ZRH_LIS_20251119_20251129_TP_935": {
+      "origin": "ZRH",
+      "destination": "LIS",
+      "departure_date": "2025-11-19",
+      "return_date": "2025-11-29",
+      "airline": "TP",
+      "flight_number": "935",
+      "return_airline": "TP",
+      "return_flight_number": "930",
+      "is_roundtrip": true,
+      "initial_price": 174.24,
+      "latest_price": 174.24,
+      "currency": "EUR",
+      "added_date": "2025-10-19T16:08:18.702391",
+      "price_history": [
+        {
+          "timestamp": "2025-10-19T16:08:18.702403",
+          "price": 174.24
+        }
+      ]
+    },
+    "ZRH_LIS_20251118_20251128_UX_1676": {
+      "origin": "ZRH",
+      "destination": "LIS",
+      "departure_date": "2025-11-18",
+      "return_date": "2025-11-28",
+      "airline": "UX",
+      "flight_number": "1676",
+      "return_airline": "UX",
+      "return_flight_number": "1150",
+      "is_roundtrip": true,
+      "initial_price": 186.89,
+      "latest_price": 186.89,
+      "currency": "EUR",
+      "added_date": "2025-10-19T16:08:25.883193",
+      "price_history": [
+        {
+          "timestamp": "2025-10-19T16:08:25.883201",
+          "price": 186.89
+        }
+      ]
+    },
+    "GVA_LIS_20251118_20251128_TP_941": {
+      "origin": "GVA",
+      "destination": "LIS",
+      "departure_date": "2025-11-18",
+      "return_date": "2025-11-28",
+      "airline": "TP",
+      "flight_number": "941",
+      "return_airline": "TP",
+      "return_flight_number": "944",
+      "is_roundtrip": true,
+      "initial_price": 157.1,
+      "latest_price": 157.1,
+      "currency": "EUR",
+      "added_date": "2025-10-19T16:14:06.282178",
+      "price_history": [
+        {
+          "timestamp": "2025-10-19T16:14:06.282189",
+          "price": 157.1
+        }
+      ]
+    },
+    "GVA_LIS_20251118_20251129_TP_941": {
+      "origin": "GVA",
+      "destination": "LIS",
+      "departure_date": "2025-11-18",
+      "return_date": "2025-11-29",
+      "airline": "TP",
+      "flight_number": "941",
+      "return_airline": "TP",
+      "return_flight_number": "944",
+      "is_roundtrip": true,
+      "initial_price": 157.1,
+      "latest_price": 157.1,
+      "currency": "EUR",
+      "added_date": "2025-10-19T16:14:08.668053",
+      "price_history": [
+        {
+          "timestamp": "2025-10-19T16:14:08.668065",
+          "price": 157.1
+        }
+      ]
+    }
+  }
+}

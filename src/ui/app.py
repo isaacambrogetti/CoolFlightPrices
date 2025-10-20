@@ -1044,27 +1044,61 @@ def display_multi_airport_results(flights, airport_routes):
         except Exception as e:
             st.error(f"Error creating airline comparison: {str(e)}")
     
-    # Full results table
+    # Full results table (matching flexible date format)
     with st.expander("📋 View All Flights"):
-        df_data = []
-        for flight in flights:
-            outbound = flight['outbound']
-            return_flight = flight.get('return')
-            df_data.append({
-                'Route': flight.get('search_route', 'Unknown'),
-                'Price': flight['price'],
-                'Currency': flight['currency'],
-                'Outbound': f"{outbound['airline']} {outbound['flight_number']}",
-                'Departure': outbound['departure_time'],
-                'Return': f"{return_flight['airline']} {return_flight['flight_number']}" if return_flight else 'N/A',
-                'Stops': outbound['stops'],
-                'Seats': flight['number_of_bookable_seats']
-            })
+        st.caption(f"Showing {len(flights)} available flights")
         
-        import pandas as pd
-        df = pd.DataFrame(df_data)
-        df = df.sort_values('Price')
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        if flights:
+            # Sort by price
+            sorted_all_flights = sorted(flights, key=lambda f: f['price'])
+            
+            # Column headers
+            col1, col2, col3, col4, col5, col6, col7 = st.columns([1.2, 1.8, 1.8, 1.2, 1, 0.8, 1])
+            with col1:
+                st.markdown("**Route**")
+            with col2:
+                st.markdown("**Departure Direction**")
+            with col3:
+                st.markdown("**Return Direction**")
+            with col4:
+                st.markdown("**Airline**")
+            with col5:
+                st.markdown("**Price**")
+            with col6:
+                st.markdown("**Curr.**")
+            with col7:
+                st.markdown("**Track**")
+            
+            st.markdown("---")
+            
+            for idx, flight in enumerate(sorted_all_flights):
+                outbound = flight['outbound']
+                return_flight = flight.get('return')
+                route = flight.get('search_route', 'Unknown')
+                
+                # Create columns for the data
+                col1, col2, col3, col4, col5, col6, col7 = st.columns([1.2, 1.8, 1.8, 1.2, 1, 0.8, 1])
+                
+                with col1:
+                    st.markdown(f"**{route}**")
+                with col2:
+                    st.markdown(f"{outbound['origin']} → {outbound['destination']}")
+                with col3:
+                    if return_flight:
+                        st.markdown(f"{return_flight['origin']} → {return_flight['destination']}")
+                    else:
+                        st.markdown("One-way")
+                with col4:
+                    st.markdown(f"{outbound['airline']} {outbound['flight_number']}")
+                with col5:
+                    st.markdown(f"**{flight['price']:.2f}**")
+                with col6:
+                    st.markdown(f"{flight['currency']}")
+                with col7:
+                    display_track_button(flight, f"all_{idx}")
+                
+                if idx < len(sorted_all_flights) - 1:
+                    st.markdown("---")
 
 
 def display_date_range_results(results, origin, destination, duration_mode=None):
@@ -1367,9 +1401,11 @@ def main():
             allow_open_jaw = st.checkbox(
                 "🔀 Allow different return airports (open-jaw)",
                 value=False,
+                key="open_jaw_checkbox",
                 help="Search for flights where you return from/to different airports. "
                      "Example: ZRH→LIS outbound, OPO→ZRH return. Requires roundtrip booking!"
             )
+            st.write(f"🔍 DEBUG (checkbox): allow_open_jaw set to {allow_open_jaw}")
             
             if allow_open_jaw:
                 st.info(
@@ -1435,8 +1471,8 @@ def main():
         
         # Generate route combinations based on search mode
         # DEBUG: Check open-jaw condition
-        if allow_open_jaw:
-            st.write(f"🔍 DEBUG: allow_open_jaw={allow_open_jaw}, multi_airport={multi_airport}, return_date={return_date}")
+        st.write(f"🔍 DEBUG: allow_open_jaw={allow_open_jaw}, multi_airport={multi_airport}, return_date={return_date}, search_mode={search_mode}")
+        st.write(f"🔍 DEBUG: Condition result: {allow_open_jaw and multi_airport and return_date}")
         
         if allow_open_jaw and multi_airport and return_date:
             # Open-jaw mode: Generate all permutations of (origin→dest, dest2→origin2)

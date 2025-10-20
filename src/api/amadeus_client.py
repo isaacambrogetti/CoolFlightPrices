@@ -208,3 +208,138 @@ class AmadeusClient:
         parsed_offers.sort(key=lambda x: x['price'])
         
         return parsed_offers
+    
+    def search_multi_city(
+        self,
+        origin_destination_pairs: List[tuple],
+        departure_dates: List[date],
+        adults: int = 1,
+        max_results: int = 10,
+        currency: str = "EUR",
+        **kwargs
+    ) -> List[Dict]:
+        """
+        Search for multi-city/open-jaw flights using Amadeus POST API
+        
+        This allows searching for flights where the return is from a different
+        destination or to a different origin than the outbound flight.
+        
+        Args:
+            origin_destination_pairs: List of (origin, destination) tuples
+                Example: [("ZRH", "LIS"), ("OPO", "ZRH")] for open-jaw
+            departure_dates: List of departure dates for each segment
+                Must match length of origin_destination_pairs
+            adults: Number of adult passengers
+            max_results: Maximum number of results to return
+            currency: Currency code (default: EUR)
+            **kwargs: Additional parameters
+            
+        Returns:
+            List of flight offer dictionaries
+            
+        Example:
+            # Open-jaw: ZRH → LIS, then OPO → ZRH
+            client.search_multi_city(
+                origin_destination_pairs=[("ZRH", "LIS"), ("OPO", "ZRH")],
+                departure_dates=[date(2025, 11, 19), date(2025, 11, 26)]
+            )
+        """
+        try:
+            if len(origin_destination_pairs) != len(departure_dates):
+                raise ValueError(
+                    f"Number of route pairs ({len(origin_destination_pairs)}) "
+                    f"must match number of dates ({len(departure_dates)})"
+                )
+            
+            # Build originDestinations array
+            origin_destinations = []
+            for idx, ((origin, destination), dep_date) in enumerate(
+                zip(origin_destination_pairs, departure_dates), start=1
+            ):
+                origin_destinations.append({
+                    "id": str(idx),
+                    "originLocationCode": origin,
+                    "destinationLocationCode": destination,
+                    "departureDateTimeRange": {
+                        "date": dep_date.isoformat()
+                    }
+                })
+            
+            # Build request body
+            request_body = {
+                "currencyCode": currency,
+                "originDestinations": origin_destinations,
+                "travelers": [
+                    {
+                        "id": "1",
+                        "travelerType": "ADULT"
+                    }
+                ] * adults,  # Repeat for number of adults
+                "sources": ["GDS"],
+                "searchCriteria": {
+                    "maxFlightOffers": max_results
+                }
+            }
+            
+            # Add any additional parameters
+            if kwargs:
+                request_body.update(kwargs)
+            
+            # Make POST API call
+            response = self.client.shopping.flight_offers_search.post(request_body)
+            
+            # Return raw data
+            return response.data
+            
+        except ResponseError as error:
+            print(f"Amadeus Multi-City API Error: {error}")
+            raise
+    
+    def get_cheapest_multi_city(
+        self,
+        origin_destination_pairs: List[tuple],
+        departure_dates: List[date],
+        **kwargs
+    ) -> List[Dict]:
+        """
+        Get cheapest multi-city flight options, sorted by price
+        
+        Args:
+            origin_destination_pairs: List of (origin, destination) tuples
+            departure_dates: List of departure dates for each segment
+            **kwargs: Additional search parameters
+            
+        Returns:
+            List of parsed flight offers, sorted by price
+        """
+        offers = self.search_multi_city(
+            origin_destination_pairs=origin_destination_pairs,
+            departure_dates=departure_dates,
+            **kwargs
+        )
+        
+        # Parse all offers
+        parsed_offers = []
+        for offer in offers:
+            parsed = self.parse_flight_offer(offer)
+            if parsed:
+                # Add open-jaw indicator
+                if len(origin_destination_pairs) >= 2:
+                    outbound_route = f"{origin_destination_pairs[0][0]}→{origin_destination_pairs[0][1]}"
+                    return_route = f"{origin_destination_pairs[1][0]}→{origin_destination_pairs[1][1]}"
+                    
+                    # Check if it's truly open-jaw (different airports)
+                    if (origin_destination_pairs[0][0] != origin_destination_pairs[1][1] or
+                        origin_destination_pairs[0][1] != origin_destination_pairs[1][0]):
+                        parsed['is_open_jaw'] = True
+                        parsed['route_description'] = f"{outbound_route} / {return_route}"
+                    else:
+                        parsed['is_open_jaw'] = False
+                        parsed['route_description'] = f"{outbound_route}"
+                
+                parsed_offers.append(parsed)
+        
+        # Sort by price
+        parsed_offers.sort(key=lambda x: x['price'])
+        
+        return parsed_offers

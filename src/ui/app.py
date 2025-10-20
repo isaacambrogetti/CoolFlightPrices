@@ -501,8 +501,12 @@ def display_single_search_results(flights, origin, destination):
     sorted_flights = sorted(flights, key=lambda f: f['price'])[:5]
     
     for i, flight in enumerate(sorted_flights, 1):
+        # Check if this is an open-jaw flight
+        open_jaw_badge = "🔀 " if flight.get('is_open_jaw', False) else ""
+        route_desc = f" - {flight.get('route_description', '')}" if flight.get('is_open_jaw', False) else ""
+        
         with st.expander(
-            f"#{i}: {flight['currency']} {flight['price']:.2f} - "
+            f"#{i}: {open_jaw_badge}{flight['currency']} {flight['price']:.2f}{route_desc} - "
             f"{flight['outbound']['airline']} {flight['outbound']['flight_number']}"
             f"{' (Cheapest!)' if i == 1 else ''}",
             expanded=(i <= 2)
@@ -537,6 +541,13 @@ def display_single_search_results(flights, origin, destination):
                     """, unsafe_allow_html=True)
             
             st.markdown(f"**Seats Available:** {flight['number_of_bookable_seats']}")
+            
+            # Show open-jaw info if applicable
+            if flight.get('is_open_jaw', False):
+                st.info(
+                    f"🔀 **Open-Jaw Flight:** This itinerary uses different airports. "
+                    f"Route: {flight.get('route_description', 'N/A')}"
+                )
             
             # Add track price button
             st.markdown("---")
@@ -1336,19 +1347,52 @@ def main():
                 destination = selected_destination.split(' - ')[0].strip() if selected_destination else ""
                 destinations = [destination] if destination else []
         
+        # Open-jaw toggle (only show if multi-airport is enabled and we have roundtrip)
+        allow_open_jaw = False
+        if multi_airport and search_mode == "📅 Single Date":
+            allow_open_jaw = st.checkbox(
+                "🔀 Allow different return airports (open-jaw)",
+                value=False,
+                help="Search for flights where you return from/to different airports. "
+                     "Example: ZRH→LIS outbound, OPO→ZRH return. May find cheaper deals!"
+            )
+            
+            if allow_open_jaw:
+                st.info(
+                    "💡 **Open-jaw mode enabled!** The app will search for combinations where:\n"
+                    "- You can fly to any selected destination airport\n"
+                    "- You can return from any selected destination airport (may be different)\n"
+                    "- You must return to one of your origin airports\n\n"
+                    "This can find significantly cheaper deals, especially in Europe!"
+                )
+        
         # Show airport combination count and validation
         if multi_airport:
             if not origins or not destinations:
                 st.warning("⚠️ Please select at least one origin and one destination airport")
             elif origins and destinations:
-                num_combinations = len(origins) * len(destinations)
-                if num_combinations > 1:
-                    st.info(f"🔄 Will search {num_combinations} airport combination{'s' if num_combinations > 1 else ''}: "
-                           f"{len(origins)} origin × {len(destinations)} destination")
-                    if num_combinations > 10:
-                        st.warning("⚠️ Searching many airports will use more API calls and take longer!")
+                if allow_open_jaw:
+                    # Open-jaw: all permutations of outbound + return
+                    num_outbound = len(origins) * len(destinations)
+                    num_return = len(destinations) * len(origins)
+                    total_combinations = num_outbound  # Each outbound can pair with multiple returns
+                    st.info(
+                        f"🔀 **Open-jaw search:** {num_outbound} outbound route{'s' if num_outbound > 1 else ''} × "
+                        f"multiple return options = testing all possible combinations!\n"
+                        f"This will use 1 API call per unique open-jaw combination."
+                    )
+                    if total_combinations > 15:
+                        st.warning("⚠️ Many combinations will take longer and use more API quota!")
                 else:
-                    st.info(f"✈️ Searching {origins[0]} → {destinations[0]}")
+                    # Normal roundtrip: same origin-destination pairs
+                    num_combinations = len(origins) * len(destinations)
+                    if num_combinations > 1:
+                        st.info(f"🔄 Will search {num_combinations} airport combination{'s' if num_combinations > 1 else ''}: "
+                               f"{len(origins)} origin × {len(destinations)} destination")
+                        if num_combinations > 10:
+                            st.warning("⚠️ Searching many airports will use more API calls and take longer!")
+                    else:
+                        st.info(f"✈️ Searching {origins[0]} → {destinations[0]}")
         elif not origins or not destinations:
             st.warning("⚠️ Please select origin and destination airports")
     
@@ -1368,7 +1412,30 @@ def main():
         st.session_state.last_search_mode = search_mode
         st.session_state.last_origins = origins
         st.session_state.last_destinations = destinations
-        st.session_state.last_airport_routes = [(orig, dest) for orig in origins for dest in destinations]
+        st.session_state.last_allow_open_jaw = allow_open_jaw if multi_airport else False
+        
+        # Generate route combinations based on search mode
+        if allow_open_jaw and multi_airport:
+            # Open-jaw mode: Generate all permutations of (origin→dest, dest2→origin2)
+            # where dest2 can be any destination airport and origin2 can be any origin airport
+            open_jaw_routes = []
+            for out_origin in origins:
+                for out_dest in destinations:
+                    for ret_origin in destinations:  # Return FROM any destination
+                        for ret_dest in origins:  # Return TO any origin
+                            # Create tuple: ((outbound_origin, outbound_dest), (return_origin, return_dest))
+                            route = ((out_origin, out_dest), (ret_origin, ret_dest))
+                            # Add route metadata
+                            is_truly_open_jaw = (out_origin != ret_dest) or (out_dest != ret_origin)
+                            open_jaw_routes.append({
+                                'route': route,
+                                'is_open_jaw': is_truly_open_jaw,
+                                'label': f"{out_origin}→{out_dest} / {ret_origin}→{ret_dest}"
+                            })
+            st.session_state.last_airport_routes = open_jaw_routes
+        else:
+            # Normal roundtrip mode: Same origin-destination pairs
+            st.session_state.last_airport_routes = [(orig, dest) for orig in origins for dest in destinations]
         
         # Validate inputs
         if not origins:
@@ -1541,30 +1608,68 @@ def main():
                 
                 all_flights = []
                 
-                # Search all airport combinations
-                for origin, destination in airport_routes:
-                    route_label = f"{origin}→{destination}"
-                    
-                    with st.spinner(f"🔄 Searching {route_label}..."):
-                        try:
-                            flights = client.get_cheapest_flights(
-                                origin=origin,
-                                destination=destination,
-                                departure_date=departure_date,
-                                return_date=return_date,
-                                adults=adults,
-                                max_results=max_results
-                            )
-                            
-                            # Add route info to each flight
-                            for flight in flights:
-                                flight['search_route'] = route_label
-                            
-                            all_flights.extend(flights)
-                            
-                        except Exception as e:
-                            st.warning(f"⚠️ Error searching {route_label}: {str(e)}")
-                            continue
+                # Check if we're in open-jaw mode
+                is_open_jaw_mode = isinstance(airport_routes, list) and len(airport_routes) > 0 and isinstance(airport_routes[0], dict)
+                
+                if is_open_jaw_mode:
+                    # Open-jaw mode: Search using multi-city API
+                    for route_info in airport_routes:
+                        route = route_info['route']
+                        is_truly_open_jaw = route_info['is_open_jaw']
+                        label = route_info['label']
+                        
+                        # route is ((out_origin, out_dest), (ret_origin, ret_dest))
+                        (out_origin, out_dest), (ret_origin, ret_dest) = route
+                        
+                        with st.spinner(f"🔄 Searching {label}..."):
+                            try:
+                                # Use multi-city API for open-jaw
+                                flights = client.get_cheapest_multi_city(
+                                    origin_destination_pairs=[(out_origin, out_dest), (ret_origin, ret_dest)],
+                                    departure_dates=[departure_date, return_date] if return_date else [departure_date],
+                                    adults=adults,
+                                    max_results=max_results,
+                                    currency="EUR"
+                                )
+                                
+                                # Add route info and open-jaw indicator to each flight
+                                for flight in flights:
+                                    flight['search_route'] = label
+                                    flight['is_open_jaw'] = is_truly_open_jaw
+                                    if 'route_description' not in flight:
+                                        flight['route_description'] = label
+                                
+                                all_flights.extend(flights)
+                                
+                            except Exception as e:
+                                st.warning(f"⚠️ Error searching {label}: {str(e)}")
+                                continue
+                else:
+                    # Normal roundtrip mode: Search all airport combinations
+                    for origin, destination in airport_routes:
+                        route_label = f"{origin}→{destination}"
+                        
+                        with st.spinner(f"🔄 Searching {route_label}..."):
+                            try:
+                                flights = client.get_cheapest_flights(
+                                    origin=origin,
+                                    destination=destination,
+                                    departure_date=departure_date,
+                                    return_date=return_date,
+                                    adults=adults,
+                                    max_results=max_results
+                                )
+                                
+                                # Add route info to each flight
+                                for flight in flights:
+                                    flight['search_route'] = route_label
+                                    flight['is_open_jaw'] = False  # Regular roundtrip
+                                
+                                all_flights.extend(flights)
+                                
+                            except Exception as e:
+                                st.warning(f"⚠️ Error searching {route_label}: {str(e)}")
+                                continue
                 
                 if not all_flights:
                     st.warning("No flights found for any route. Try different dates or airports.")

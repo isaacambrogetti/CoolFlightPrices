@@ -123,6 +123,67 @@ def display_tracker_tab():
     
     st.markdown("---")
     
+    # Country Comparison Section
+    st.subheader("🌍 Compare Flights by Destination Country")
+    st.caption("View price evolution for all flights to the same country")
+    
+    # Get unique destination countries from tracked flights
+    from src.utils.airport_countries import get_country_for_airport
+    
+    destination_countries = {}
+    for flight_id, flight_data in tracked_flights.items():
+        country = get_country_for_airport(flight_data['destination'])
+        if country != 'Unknown':
+            if country not in destination_countries:
+                destination_countries[country] = 0
+            destination_countries[country] += 1
+    
+    if destination_countries:
+        # Sort by number of flights (descending)
+        sorted_countries = sorted(destination_countries.items(), key=lambda x: x[1], reverse=True)
+        
+        # Create columns for country buttons
+        cols_per_row = 4
+        rows = [sorted_countries[i:i + cols_per_row] for i in range(0, len(sorted_countries), cols_per_row)]
+        
+        for row in rows:
+            cols = st.columns(cols_per_row)
+            for idx, (country, count) in enumerate(row):
+                with cols[idx]:
+                    if st.button(
+                        f"🌍 {country} ({count})",
+                        key=f"country_{country}",
+                        use_container_width=True
+                    ):
+                        st.session_state.selected_country = country
+        
+        # Display selected country comparison
+        if 'selected_country' in st.session_state and st.session_state.selected_country:
+            selected_country = st.session_state.selected_country
+            
+            st.markdown("---")
+            st.subheader(f"📊 {selected_country} - Price Comparison")
+            
+            # Create and display the comparison graph
+            fig = create_country_comparison_graph(tracked_flights, selected_country)
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Show list of flights included
+            with st.expander(f"✈️ Flights included ({destination_countries.get(selected_country, 0)})"):
+                for flight_id, flight_data in tracked_flights.items():
+                    if get_country_for_airport(flight_data['destination']) == selected_country:
+                        route = f"{flight_data['origin']} → {flight_data['destination']}"
+                        dep = flight_data['departure_date']
+                        ret = flight_data.get('return_date', 'One-way')
+                        price = flight_data['latest_price']
+                        currency = flight_data['currency']
+                        st.markdown(f"- **{route}** | Dep: {dep} | Latest: {currency} {price:.2f}")
+    else:
+        st.info("Track flights to different countries to enable country-based comparison!")
+    
+    st.markdown("---")
+    st.markdown("---")
+    
     # Display each tracked flight
     for flight_id, flight_data in tracked_flights.items():
         price_change = flight_data['latest_price'] - flight_data['initial_price']
@@ -324,6 +385,95 @@ def create_price_evolution_graph(flight_data: dict) -> go.Figure:
             x=1
         )
     )
+    
+    return fig
+
+
+def create_country_comparison_graph(flights_data: dict, country: str) -> go.Figure:
+    """
+    Create a comparison graph for all flights to a specific country
+    
+    Args:
+        flights_data: Dictionary of flight_id -> flight_data
+        country: Destination country to filter and display
+        
+    Returns:
+        Plotly figure object
+    """
+    from src.utils.airport_countries import get_country_for_airport
+    
+    fig = go.Figure()
+    
+    colors = [
+        '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+        '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
+    ]
+    
+    flight_count = 0
+    
+    for flight_id, flight_data in flights_data.items():
+        # Check if this flight goes to the specified country
+        dest_country = get_country_for_airport(flight_data['destination'])
+        
+        if dest_country != country:
+            continue
+        
+        # Extract price history
+        history = flight_data['price_history']
+        if not history:
+            continue
+        
+        timestamps = [datetime.fromisoformat(entry['timestamp']) for entry in history]
+        prices = [entry['price'] for entry in history]
+        currency = flight_data['currency']
+        
+        # Create flight label
+        route = f"{flight_data['origin']} → {flight_data['destination']}"
+        dep_date = flight_data['departure_date']
+        ret_date = flight_data.get('return_date', 'One-way')
+        flight_label = f"{route} ({dep_date})"
+        
+        color = colors[flight_count % len(colors)]
+        
+        # Add price line
+        fig.add_trace(go.Scatter(
+            x=timestamps,
+            y=prices,
+            mode='lines+markers',
+            name=flight_label,
+            line=dict(color=color, width=2),
+            marker=dict(size=8, color=color),
+            hovertemplate=f'<b>{flight_label}</b><br>%{{x|%b %d, %H:%M}}<br>Price: {currency} %{{y:.2f}}<br><extra></extra>'
+        ))
+        
+        flight_count += 1
+    
+    # Layout
+    fig.update_layout(
+        title=f"Price Comparison - Flights to {country}",
+        xaxis_title="Date & Time",
+        yaxis_title=f"Price ({currency if flight_count > 0 else 'EUR'})",
+        hovermode='x unified',
+        height=500,
+        showlegend=True,
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=1,
+            xanchor="left",
+            x=1.02
+        )
+    )
+    
+    if flight_count == 0:
+        # No flights for this country
+        fig.add_annotation(
+            text=f"No tracked flights to {country}",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5,
+            showarrow=False,
+            font=dict(size=16, color="gray")
+        )
     
     return fig
 

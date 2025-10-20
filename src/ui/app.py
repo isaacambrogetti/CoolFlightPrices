@@ -503,11 +503,17 @@ def display_single_search_results(flights, origin, destination):
     for i, flight in enumerate(sorted_flights, 1):
         # Check if this is an open-jaw flight
         open_jaw_badge = "🔀 " if flight.get('is_open_jaw', False) else ""
-        route_desc = f" - {flight.get('route_description', '')}" if flight.get('is_open_jaw', False) else ""
+        
+        # Build route description
+        outbound_route = f"{flight['outbound']['origin']}→{flight['outbound']['destination']}"
+        if flight.get('return'):
+            return_route = f"{flight['return']['origin']}→{flight['return']['destination']}"
+            route_display = f"{outbound_route} / {return_route}"
+        else:
+            route_display = outbound_route
         
         with st.expander(
-            f"#{i}: {open_jaw_badge}{flight['currency']} {flight['price']:.2f}{route_desc} - "
-            f"{flight['outbound']['airline']} {flight['outbound']['flight_number']}"
+            f"#{i}: {open_jaw_badge}{flight['currency']} {flight['price']:.2f} - {route_display}"
             f"{' (Cheapest!)' if i == 1 else ''}",
             expanded=(i <= 2)
         ):
@@ -1347,14 +1353,15 @@ def main():
                 destination = selected_destination.split(' - ')[0].strip() if selected_destination else ""
                 destinations = [destination] if destination else []
         
-        # Open-jaw toggle (only show if multi-airport is enabled and we have roundtrip)
+        # Open-jaw toggle (only show if multi-airport is enabled)
+        # Note: Will be validated later to ensure we have a return date
         allow_open_jaw = False
         if multi_airport and search_mode == "📅 Single Date":
             allow_open_jaw = st.checkbox(
                 "🔀 Allow different return airports (open-jaw)",
                 value=False,
                 help="Search for flights where you return from/to different airports. "
-                     "Example: ZRH→LIS outbound, OPO→ZRH return. May find cheaper deals!"
+                     "Example: ZRH→LIS outbound, OPO→ZRH return. Requires roundtrip booking!"
             )
             
             if allow_open_jaw:
@@ -1408,6 +1415,11 @@ def main():
     
     # Main content area
     if search_button:
+        # Validate open-jaw requirements
+        if allow_open_jaw and not return_date:
+            st.error("🔀 Open-jaw flights require a roundtrip booking. Please select a return date or disable open-jaw mode.")
+            st.stop()
+        
         # Store search parameters in session state
         st.session_state.last_search_mode = search_mode
         st.session_state.last_origins = origins
@@ -1415,7 +1427,7 @@ def main():
         st.session_state.last_allow_open_jaw = allow_open_jaw if multi_airport else False
         
         # Generate route combinations based on search mode
-        if allow_open_jaw and multi_airport:
+        if allow_open_jaw and multi_airport and return_date:
             # Open-jaw mode: Generate all permutations of (origin→dest, dest2→origin2)
             # where dest2 can be any destination airport and origin2 can be any origin airport
             open_jaw_routes = []

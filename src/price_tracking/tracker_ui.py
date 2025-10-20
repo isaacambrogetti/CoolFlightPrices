@@ -293,14 +293,13 @@ def display_tracker_tab():
         else:
             price_badge = f"⚪ **{flight_data['currency']} {flight_data['latest_price']:.2f}** (no change)"
         
-        # Route title
-        route_title = f"✈️ {flight_data['origin']} → {flight_data['destination']}"
-        date_info = f"{flight_data['departure_date']}"
+        # Route title with return flight info
+        route_title = f"✈️ {flight_data['origin']} → {flight_data['destination']} ({flight_data['departure_date']})"
         if flight_data['is_roundtrip']:
-            date_info += f" → {flight_data['return_date']}"
+            route_title += f"\n{flight_data['destination']} → {flight_data['origin']} ({flight_data['return_date']})"
         
         with st.expander(
-            f"{route_title} | {date_info} | {price_badge}",
+            f"{route_title} | {price_badge}",
             expanded=True
         ):
             col1, col2 = st.columns([2, 1])
@@ -466,8 +465,12 @@ def create_price_evolution_graph(flight_data: dict) -> go.Figure:
         ))
     
     # Layout
+    title_text = f"Price Evolution: {flight_data['origin']} → {flight_data['destination']} ({flight_data['departure_date']})"
+    if flight_data.get('return_date'):
+        title_text += f"<br>{flight_data['destination']} → {flight_data['origin']} ({flight_data['return_date']})"
+    
     fig.update_layout(
-        title=f"Price Evolution: {flight_data['origin']} → {flight_data['destination']}",
+        title=title_text,
         xaxis_title="Date",
         yaxis_title=f"Price ({currency})",
         hovermode='x unified',
@@ -523,11 +526,21 @@ def create_country_comparison_graph(flights_data: dict, country: str) -> go.Figu
         prices = [entry['price'] for entry in history]
         currency = flight_data['currency']
         
-        # Create flight label
+        # Create flight label with return info for roundtrips
         route = f"{flight_data['origin']} → {flight_data['destination']}"
         dep_date = flight_data['departure_date']
-        ret_date = flight_data.get('return_date', 'One-way')
-        flight_label = f"{route} ({dep_date})"
+        ret_date = flight_data.get('return_date')
+        
+        if ret_date:
+            # Roundtrip - include return flight info
+            return_route = f"{flight_data['destination']} → {flight_data['origin']}"
+            flight_label = f"{route} ({dep_date})<br>{return_route} ({ret_date})"
+            # For legend (single line)
+            flight_label_short = f"{route} ({dep_date})"
+        else:
+            # One-way
+            flight_label = f"{route} ({dep_date})"
+            flight_label_short = flight_label
         
         color = colors[flight_count % len(colors)]
         
@@ -536,7 +549,7 @@ def create_country_comparison_graph(flights_data: dict, country: str) -> go.Figu
             x=timestamps,
             y=prices,
             mode='lines+markers',
-            name=flight_label,
+            name=flight_label_short,
             line=dict(color=color, width=2),
             marker=dict(size=8, color=color),
             hovertemplate=f'<b>{flight_label}</b><br>%{{x|%b %d, %H:%M}}<br>Price: {currency} %{{y:.2f}}<br><extra></extra>'

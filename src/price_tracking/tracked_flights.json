@@ -255,6 +255,50 @@
           "price": 205.79
         }
       ]
+    },
+    "GVA_OPO_20260515_20260523_IB_9620": {
+      "origin": "GVA",
+      "destination": "OPO",
+      "departure_date": "2026-05-15",
+      "return_date": "2026-05-23",
+      "airline": "IB",
+      "flight_number": "9620",
+      "return_airline": "IB",
+      "return_flight_number": "9544",
+      "is_roundtrip": true,
+      "initial_price": 276.61,
+      "latest_price": 276.61,
+      "currency": "EUR",
+      "added_date": "2025-10-20T10:19:38.489174",
+      "last_checked": "2025-10-20T10:19:38.489174",
+      "price_history": [
+        {
+          "timestamp": "2025-10-20T10:19:38.489174",
+          "price": 276.61
+        }
+      ]
+    },
+    "ZRH_OPO_20260514_20260522_IB_9632": {
+      "origin": "ZRH",
+      "destination": "OPO",
+      "departure_date": "2026-05-14",
+      "return_date": "2026-05-22",
+      "airline": "IB",
+      "flight_number": "9632",
+      "return_airline": "IB",
+      "return_flight_number": "9544",
+      "is_roundtrip": true,
+      "initial_price": 278.6,
+      "latest_price": 278.6,
+      "currency": "EUR",
+      "added_date": "2025-10-20T10:19:41.789173",
+      "last_checked": "2025-10-20T10:19:41.789173",
+      "price_history": [
+        {
+          "timestamp": "2025-10-20T10:19:41.789173",
+          "price": 278.6
+        }
+      ]
     }
   }
 }

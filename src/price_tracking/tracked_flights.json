@@ -145,6 +145,116 @@
           "price": 315.9
         }
       ]
+    },
+    "GVA_MAD_20260212_20260222_AZ_575": {
+      "origin": "GVA",
+      "destination": "MAD",
+      "departure_date": "2026-02-12",
+      "return_date": "2026-02-22",
+      "airline": "AZ",
+      "flight_number": "575",
+      "return_airline": "AZ",
+      "return_flight_number": "63",
+      "is_roundtrip": true,
+      "initial_price": 206.02,
+      "latest_price": 206.02,
+      "currency": "EUR",
+      "added_date": "2025-10-20T09:51:40.926047",
+      "last_checked": "2025-10-20T09:51:40.926047",
+      "price_history": [
+        {
+          "timestamp": "2025-10-20T09:51:40.926047",
+          "price": 206.02
+        }
+      ]
+    },
+    "GVA_BCN_20260212_20260222_AZ_575": {
+      "origin": "GVA",
+      "destination": "BCN",
+      "departure_date": "2026-02-12",
+      "return_date": "2026-02-22",
+      "airline": "AZ",
+      "flight_number": "575",
+      "return_airline": "AZ",
+      "return_flight_number": "79",
+      "is_roundtrip": true,
+      "initial_price": 206.1,
+      "latest_price": 206.1,
+      "currency": "EUR",
+      "added_date": "2025-10-20T09:52:17.828296",
+      "last_checked": "2025-10-20T09:52:17.828296",
+      "price_history": [
+        {
+          "timestamp": "2025-10-20T09:52:17.828296",
+          "price": 206.1
+        }
+      ]
+    },
+    "ZRH_MAD_20260212_20260222_AZ_573": {
+      "origin": "ZRH",
+      "destination": "MAD",
+      "departure_date": "2026-02-12",
+      "return_date": "2026-02-22",
+      "airline": "AZ",
+      "flight_number": "573",
+      "return_airline": "AZ",
+      "return_flight_number": "63",
+      "is_roundtrip": true,
+      "initial_price": 208.01,
+      "latest_price": 208.01,
+      "currency": "EUR",
+      "added_date": "2025-10-20T09:52:27.680922",
+      "last_checked": "2025-10-20T09:52:27.680922",
+      "price_history": [
+        {
+          "timestamp": "2025-10-20T09:52:27.680922",
+          "price": 208.01
+        }
+      ]
+    },
+    "AMS_BER_20260115_20260124_KL_1777": {
+      "origin": "AMS",
+      "destination": "BER",
+      "departure_date": "2026-01-15",
+      "return_date": "2026-01-24",
+      "airline": "KL",
+      "flight_number": "1777",
+      "return_airline": "KL",
+      "return_flight_number": "1770",
+      "is_roundtrip": true,
+      "initial_price": 205.79,
+      "latest_price": 205.79,
+      "currency": "EUR",
+      "added_date": "2025-10-20T09:56:51.792768",
+      "last_checked": "2025-10-20T09:56:51.792768",
+      "price_history": [
+        {
+          "timestamp": "2025-10-20T09:56:51.792768",
+          "price": 205.79
+        }
+      ]
+    },
+    "AMS_BER_20260116_20260125_KL_1777": {
+      "origin": "AMS",
+      "destination": "BER",
+      "departure_date": "2026-01-16",
+      "return_date": "2026-01-25",
+      "airline": "KL",
+      "flight_number": "1777",
+      "return_airline": "KL",
+      "return_flight_number": "1770",
+      "is_roundtrip": true,
+      "initial_price": 205.79,
+      "latest_price": 205.79,
+      "currency": "EUR",
+      "added_date": "2025-10-20T09:56:59.448875",
+      "last_checked": "2025-10-20T09:56:59.448875",
+      "price_history": [
+        {
+          "timestamp": "2025-10-20T09:56:59.448875",
+          "price": 205.79
+        }
+      ]
     }
   }
 }

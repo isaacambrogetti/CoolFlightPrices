@@ -12,6 +12,57 @@ from src.price_tracking.database import PriceTrackingDB
 
 def display_tracker_tab():
     """
+Price Tracker UI Tab
+
+Displays tracked flights and their price evolution graphs.
+"""
+
+import streamlit as st
+import plotly.graph_objects as go
+from datetime import datetime
+from collections import defaultdict
+from src.price_tracking.database import PriceTrackingDB
+
+
+def group_flights_by_period(flights_data: dict) -> dict:
+    """
+    Group flights by their departure time period (month-year)
+    
+    Args:
+        flights_data: Dictionary of flight_id -> flight_data
+        
+    Returns:
+        Dictionary of period -> list of (flight_id, flight_data) tuples
+    """
+    grouped = defaultdict(list)
+    
+    for flight_id, flight_data in flights_data.items():
+        dep_date_str = flight_data.get('departure_date')
+        if not dep_date_str:
+            grouped['Unknown'].append((flight_id, flight_data))
+            continue
+        
+        try:
+            dep_date = datetime.fromisoformat(dep_date_str).date()
+            # Group by Month Year (e.g., "March 2026", "August 2026")
+            period_key = dep_date.strftime('%B %Y')
+            grouped[period_key].append((flight_id, flight_data))
+        except:
+            grouped['Unknown'].append((flight_id, flight_data))
+    
+    # Sort periods chronologically
+    sorted_periods = {}
+    for period, flights in sorted(grouped.items(), key=lambda x: (
+        datetime.strptime(x[0], '%B %Y') if x[0] != 'Unknown' else datetime.min
+    )):
+        sorted_periods[period] = flights
+    
+    return sorted_periods
+
+
+
+def display_tracker_tab():
+    """
     Display the price tracking dashboard with all tracked flights
     """
     st.header("📊 Flight Price Tracker")
@@ -164,9 +215,54 @@ def display_tracker_tab():
             st.markdown("---")
             st.subheader(f"📊 {selected_country} - Price Comparison")
             
-            # Create and display the comparison graph
-            fig = create_country_comparison_graph(tracked_flights, selected_country)
-            st.plotly_chart(fig, use_container_width=True)
+            # Add view mode toggle
+            col_label, col_toggle = st.columns([3, 1])
+            with col_label:
+                st.caption("Choose how to view your tracked flights:")
+            with col_toggle:
+                view_mode = st.radio(
+                    "View Mode",
+                    ["All Together", "Group by Period"],
+                    horizontal=True,
+                    label_visibility="collapsed",
+                    key=f"view_mode_{selected_country}"
+                )
+            
+            # Filter flights for selected country
+            country_flights = {
+                fid: fdata for fid, fdata in tracked_flights.items()
+                if get_country_for_airport(fdata['destination']) == selected_country
+            }
+            
+            if view_mode == "All Together":
+                # Show all flights in one graph (original behavior)
+                fig = create_country_comparison_graph(country_flights, selected_country)
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                # Group by travel period
+                grouped_flights = group_flights_by_period(country_flights)
+                
+                if len(grouped_flights) == 1:
+                    # Only one period, show single graph
+                    period = list(grouped_flights.keys())[0]
+                    st.info(f"All flights are in the same period: **{period}**")
+                    flights_dict = {fid: fdata for fid, fdata in grouped_flights[period]}
+                    fig = create_country_comparison_graph(flights_dict, selected_country)
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    # Multiple periods, show separate graphs
+                    st.info(f"📅 Showing {len(grouped_flights)} different travel periods")
+                    
+                    for period, flights_list in grouped_flights.items():
+                        st.markdown(f"### 📆 {period}")
+                        st.caption(f"{len(flights_list)} flight(s) in this period")
+                        
+                        # Convert list back to dict for graph function
+                        flights_dict = {fid: fdata for fid, fdata in flights_list}
+                        fig = create_country_comparison_graph(flights_dict, selected_country)
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        st.markdown("---")
             
             # Show list of flights included
             with st.expander(f"✈️ Flights included ({destination_countries.get(selected_country, 0)})"):

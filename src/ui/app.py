@@ -713,25 +713,72 @@ def display_single_search_results(flights, origin, destination):
     
     # Full results table
     with st.expander("📋 View All Results"):
-        df_data = []
-        for flight in flights:
+        st.caption(f"Showing all {len(flights)} flight options")
+        
+        # Column headers
+        col1, col2, col3, col4, col5, col6, col7, col8 = st.columns([1.2, 1.5, 1.2, 1.5, 0.8, 1, 0.8, 1])
+        with col1:
+            st.markdown("**Dep. Date**")
+        with col2:
+            st.markdown("**Departure Direction**")
+        with col3:
+            st.markdown("**Ret. Date**")
+        with col4:
+            st.markdown("**Return Direction**")
+        with col5:
+            st.markdown("**Days**")
+        with col6:
+            st.markdown("**Price**")
+        with col7:
+            st.markdown("**Curr.**")
+        with col8:
+            st.markdown("**Track**")
+        
+        st.markdown("---")
+        
+        for idx, flight in enumerate(flights):
             outbound = flight['outbound']
             return_flight = flight.get('return')
-            df_data.append({
-                'Price': flight['price'],
-                'Currency': flight['currency'],
-                'Airline': outbound['airline'],
-                'Flight #': outbound['flight_number'],
-                'Departure': outbound['departure_time'],
-                'Arrival': outbound['arrival_time'],
-                'Stops': outbound['stops'],
-                'Duration': outbound['duration'],
-                'Return Airline': return_flight['airline'] if return_flight else 'N/A',
-                'Return Flight #': return_flight['flight_number'] if return_flight else 'N/A',
-            })
-        
-        df = pd.DataFrame(df_data)
-        st.dataframe(df, use_container_width=True, height=400)
+            
+            # Calculate days at destination for roundtrips
+            days_there = "N/A"
+            if return_flight:
+                try:
+                    from datetime import datetime
+                    dep_date = datetime.fromisoformat(str(outbound['departure_date'])).date() if isinstance(outbound['departure_date'], str) else outbound['departure_date']
+                    ret_date = datetime.fromisoformat(str(return_flight['departure_date'])).date() if isinstance(return_flight['departure_date'], str) else return_flight['departure_date']
+                    days_there = (ret_date - dep_date).days
+                except:
+                    days_there = "N/A"
+            
+            # Create columns for the data
+            col1, col2, col3, col4, col5, col6, col7, col8 = st.columns([1.2, 1.5, 1.2, 1.5, 0.8, 1, 0.8, 1])
+            
+            with col1:
+                st.markdown(f"**{outbound.get('departure_date', 'N/A')}**")
+            with col2:
+                st.markdown(f"{outbound['origin']} → {outbound['destination']}")
+            with col3:
+                if return_flight:
+                    st.markdown(f"**{return_flight.get('departure_date', 'N/A')}**")
+                else:
+                    st.markdown("—")
+            with col4:
+                if return_flight:
+                    st.markdown(f"{return_flight['origin']} → {return_flight['destination']}")
+                else:
+                    st.markdown("One-way")
+            with col5:
+                st.markdown(f"{days_there}")
+            with col6:
+                st.markdown(f"**{flight['price']:.2f}**")
+            with col7:
+                st.markdown(f"{flight['currency']}")
+            with col8:
+                display_track_button(flight, f"all_results_{idx}")
+            
+            if idx < len(flights) - 1:
+                st.markdown("---")
 
 
 def display_multi_airport_results(flights, airport_routes):
@@ -1131,20 +1178,67 @@ def display_date_range_results(results, origin, destination, duration_mode=None)
     
     # Full results table
     with st.expander("📋 View All Results"):
-        df_data = []
-        for r in results:
-            if r.success and r.cheapest_price:
-                df_data.append({
-                    'Departure': r.departure_date.strftime('%b %d'),
-                    'Return': r.return_date.strftime('%b %d'),
-                    'Duration': f"{r.total_duration} days",
-                    'Days There': r.days_at_destination,
-                    'Price': r.cheapest_price,
-                    'Currency': r.currency
-                })
+        # Filter results with valid flights
+        valid_results = [r for r in results if r.success and r.cheapest_price and r.cheapest_flight]
+        st.caption(f"Showing {len(valid_results)} date combinations with available flights")
         
-        df = pd.DataFrame(df_data)
-        st.dataframe(df, width="stretch", height=400)
+        if valid_results:
+            # Column headers
+            col1, col2, col3, col4, col5, col6, col7, col8 = st.columns([1.2, 1.5, 1.2, 1.5, 0.8, 1, 0.8, 1])
+            with col1:
+                st.markdown("**Dep. Date**")
+            with col2:
+                st.markdown("**Departure Direction**")
+            with col3:
+                st.markdown("**Ret. Date**")
+            with col4:
+                st.markdown("**Return Direction**")
+            with col5:
+                st.markdown("**Days**")
+            with col6:
+                st.markdown("**Price**")
+            with col7:
+                st.markdown("**Curr.**")
+            with col8:
+                st.markdown("**Track**")
+            
+            st.markdown("---")
+            
+            for idx, r in enumerate(valid_results):
+                flight = r.cheapest_flight
+                outbound = flight['outbound']
+                return_flight = flight.get('return')
+                
+                # Create columns for the data
+                col1, col2, col3, col4, col5, col6, col7, col8 = st.columns([1.2, 1.5, 1.2, 1.5, 0.8, 1, 0.8, 1])
+                
+                with col1:
+                    st.markdown(f"**{r.departure_date.strftime('%b %d')}**")
+                with col2:
+                    st.markdown(f"{outbound['origin']} → {outbound['destination']}")
+                with col3:
+                    if return_flight:
+                        st.markdown(f"**{r.return_date.strftime('%b %d')}**")
+                    else:
+                        st.markdown("—")
+                with col4:
+                    if return_flight:
+                        st.markdown(f"{return_flight['origin']} → {return_flight['destination']}")
+                    else:
+                        st.markdown("One-way")
+                with col5:
+                    st.markdown(f"{r.days_at_destination}")
+                with col6:
+                    st.markdown(f"**{r.cheapest_price:.2f}**")
+                with col7:
+                    st.markdown(f"{r.currency}")
+                with col8:
+                    display_track_button(flight, f"flex_all_{idx}")
+                
+                if idx < len(valid_results) - 1:
+                    st.markdown("---")
+        else:
+            st.info("No flight results available to display")
 
 
 def main():

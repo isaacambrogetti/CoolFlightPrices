@@ -299,6 +299,50 @@
           "price": 278.6
         }
       ]
+    },
+    "MXP_MAD_20251119_20251123_UX_1066": {
+      "origin": "MXP",
+      "destination": "MAD",
+      "departure_date": "2025-11-19",
+      "return_date": "2025-11-23",
+      "airline": "UX",
+      "flight_number": "1066",
+      "return_airline": "UX",
+      "return_flight_number": "1671",
+      "is_roundtrip": true,
+      "initial_price": 124.13,
+      "latest_price": 124.13,
+      "currency": "EUR",
+      "added_date": "2025-10-20T14:17:36.657959",
+      "last_checked": "2025-10-20T14:17:36.657959",
+      "price_history": [
+        {
+          "timestamp": "2025-10-20T14:17:36.657959",
+          "price": 124.13
+        }
+      ]
+    },
+    "ZRH_MAD_20251119_20251123_UX_1676": {
+      "origin": "ZRH",
+      "destination": "MAD",
+      "departure_date": "2025-11-19",
+      "return_date": "2025-11-23",
+      "airline": "UX",
+      "flight_number": "1676",
+      "return_airline": "UX",
+      "return_flight_number": "1065",
+      "is_roundtrip": true,
+      "initial_price": 146.25,
+      "latest_price": 146.25,
+      "currency": "EUR",
+      "added_date": "2025-10-20T14:17:41.763423",
+      "last_checked": "2025-10-20T14:17:41.763423",
+      "price_history": [
+        {
+          "timestamp": "2025-10-20T14:17:41.763423",
+          "price": 146.25
+        }
+      ]
     }
   }
 }

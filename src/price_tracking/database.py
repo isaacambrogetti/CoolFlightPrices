@@ -63,8 +63,10 @@ class PriceTrackingDB:
         """
         Generate unique ID for a flight
         
-        Format: ORIGIN_DEST_DEPDATE_RETDATE_AIRLINE_FLIGHTNUM
-        Example: ZRH_LIS_20251215_20251222_TP_1234
+        Format for roundtrip: OUT_ORIGIN_DEST_DEPDATE_AIRLINE_FLIGHTNUM_RET_ORIGIN_DEST_RETDATE_AIRLINE_FLIGHTNUM
+        Format for one-way: OUT_ORIGIN_DEST_DEPDATE_AIRLINE_FLIGHTNUM_OW
+        Example roundtrip: OUT_ZRH_LIS_20251215_TP_1234_RET_OPO_ZRH_20251222_TP_5678
+        Example one-way: OUT_ZRH_LIS_20251215_TP_1234_OW
         
         Args:
             flight: Flight dictionary with outbound (and optionally return) info
@@ -73,33 +75,45 @@ class PriceTrackingDB:
             Unique flight identifier string
         """
         outbound = flight['outbound']
-        origin = outbound.get('origin', 'UNK')
-        destination = outbound.get('destination', 'UNK')
-        dep_date = outbound.get('departure_date', '')
+        out_origin = outbound.get('origin', 'UNK')
+        out_destination = outbound.get('destination', 'UNK')
+        out_dep_date = outbound.get('departure_date', '')
+        out_airline = outbound.get('airline', 'UNK')
+        out_flight_num = outbound.get('flight_number', '0000')
+        
+        # Clean outbound date
+        if out_dep_date:
+            out_dep_date_str = str(out_dep_date)
+            out_dep_date_clean = out_dep_date_str.replace('-', '')
+        else:
+            out_dep_date_clean = '00000000'
+        
+        # Build outbound part
+        outbound_id = f"OUT_{out_origin}_{out_destination}_{out_dep_date_clean}_{out_airline}_{out_flight_num}"
         
         # Handle return flights
         if flight.get('return'):
-            ret_date = flight['return'].get('departure_date', 'OW')
-        else:
-            ret_date = 'OW'
-        
-        airline = outbound.get('airline', 'UNK')
-        flight_num = outbound.get('flight_number', '0000')
-        
-        # Clean dates (remove hyphens) - convert to string first if needed
-        if dep_date:
-            dep_date_str = str(dep_date)  # Convert date object to string
-            dep_date_clean = dep_date_str.replace('-', '')
-        else:
-            dep_date_clean = '00000000'
+            return_flight = flight['return']
+            ret_origin = return_flight.get('origin', 'UNK')
+            ret_destination = return_flight.get('destination', 'UNK')
+            ret_dep_date = return_flight.get('departure_date', '')
+            ret_airline = return_flight.get('airline', 'UNK')
+            ret_flight_num = return_flight.get('flight_number', '0000')
             
-        if ret_date != 'OW':
-            ret_date_str = str(ret_date)  # Convert date object to string
-            ret_date_clean = ret_date_str.replace('-', '')
+            # Clean return date
+            if ret_dep_date:
+                ret_dep_date_str = str(ret_dep_date)
+                ret_dep_date_clean = ret_dep_date_str.replace('-', '')
+            else:
+                ret_dep_date_clean = '00000000'
+            
+            # Build return part
+            return_id = f"RET_{ret_origin}_{ret_destination}_{ret_dep_date_clean}_{ret_airline}_{ret_flight_num}"
+            
+            return f"{outbound_id}_{return_id}"
         else:
-            ret_date_clean = 'OW'
-        
-        return f"{origin}_{destination}_{dep_date_clean}_{ret_date_clean}_{airline}_{flight_num}"
+            # One-way flight
+            return f"{outbound_id}_OW"
     
     def add_tracked_flight(self, flight: Dict, current_price: float, currency: str) -> str:
         """

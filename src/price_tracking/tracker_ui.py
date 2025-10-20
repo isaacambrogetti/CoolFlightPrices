@@ -300,7 +300,7 @@ def display_tracker_tab():
         
         with st.expander(
             f"{route_title} | {price_badge}",
-            expanded=True
+            expanded=False
         ):
             col1, col2 = st.columns([2, 1])
             
@@ -465,7 +465,7 @@ def create_price_evolution_graph(flight_data: dict) -> go.Figure:
         ))
     
     # Layout
-    title_text = f"Price Evolution: {flight_data['origin']} → {flight_data['destination']} ({flight_data['departure_date']})"
+    title_text = f"Price Evolution:<br>{flight_data['origin']} → {flight_data['destination']} ({flight_data['departure_date']})"
     if flight_data.get('return_date'):
         title_text += f"<br>{flight_data['destination']} → {flight_data['origin']} ({flight_data['return_date']})"
     

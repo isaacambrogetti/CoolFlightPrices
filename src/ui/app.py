@@ -1394,16 +1394,17 @@ def main():
                 destination = selected_destination.split(' - ')[0].strip() if selected_destination else ""
                 destinations = [destination] if destination else []
         
-        # Open-jaw toggle (only show if multi-airport is enabled)
+        # Open-jaw toggle (show if multi-airport is enabled for both modes)
         # Note: Will be validated later to ensure we have a return date
         allow_open_jaw = False
-        if multi_airport and search_mode == "📅 Single Date":
+        if multi_airport:
             allow_open_jaw = st.checkbox(
                 "🔀 Allow different return airports (open-jaw)",
                 value=False,
                 key="open_jaw_checkbox",
                 help="Search for flights where you return from/to different airports. "
-                     "Example: ZRH→LIS outbound, OPO→ZRH return. Requires roundtrip booking!"
+                     "Example: ZRH→LIS outbound, OPO→ZRH return. Requires roundtrip booking! "
+                     "Note: Open-jaw increases API calls significantly in flexible date mode."
             )
             
             if allow_open_jaw:
@@ -1457,10 +1458,14 @@ def main():
     
     # Main content area
     if search_button:
-        # Validate open-jaw requirements
-        if allow_open_jaw and not return_date:
-            st.error("🔀 Open-jaw flights require a roundtrip booking. Please select a return date or disable open-jaw mode.")
-            st.stop()
+        # Validate open-jaw requirements (different for each mode)
+        if allow_open_jaw:
+            if search_mode == "📅 Single Date" and not return_date:
+                st.error("🔀 Open-jaw flights require a roundtrip booking. Please select a return date or disable open-jaw mode.")
+                st.stop()
+            elif search_mode == "💡 Flexible Dates (Date Range)":
+                # For flexible dates, we'll validate when processing date combinations
+                pass
         
         # Store search parameters in session state
         st.session_state.last_search_mode = search_mode
@@ -1468,8 +1473,8 @@ def main():
         st.session_state.last_destinations = destinations
         st.session_state.last_allow_open_jaw = allow_open_jaw if multi_airport else False
         
-        # Generate route combinations based on search mode
-        if allow_open_jaw and multi_airport and return_date:
+        # Generate route combinations based on search mode and open-jaw setting
+        if allow_open_jaw and multi_airport:
             # Open-jaw mode: Generate all permutations of (origin→dest, dest2→origin2)
             # where dest2 can be any destination airport and origin2 can be any origin airport
             st.info(f"✅ Generating {len(origins)}×{len(destinations)} open-jaw route combinations...")
@@ -1575,28 +1580,60 @@ def main():
                 
                 all_results = []
                 
-                for route_idx, (origin, destination) in enumerate(airport_routes):
-                    route_label = f"{origin}→{destination}"
-                    
-                    def update_progress(current, total, message):
-                        overall_progress = (route_idx * len(combinations) + current) / total_searches
-                        progress_bar.progress(overall_progress)
-                        status_text.text(f"[{route_label}] {message} ({route_idx + 1}/{len(airport_routes)} routes)")
-                    
-                    results = batch_search.search_date_range(
-                        origin=origin,
-                        destination=destination,
-                        date_combinations=combinations,
-                        adults=params['adults'],
-                        progress_callback=update_progress
-                    )
-                    
-                    # Add route info to each result
-                    for result in results:
-                        result.origin = origin
-                        result.destination = destination
-                    
-                    all_results.extend(results)
+                # Check if we're in open-jaw mode
+                is_open_jaw_mode = isinstance(airport_routes[0], dict) if airport_routes else False
+                
+                if is_open_jaw_mode:
+                    # Open-jaw mode: Use multi-city API for each route and date combination
+                    for route_idx, route_info in enumerate(airport_routes):
+                        route_label = route_info['label']
+                        route = route_info['route']
+                        (out_origin, out_dest), (ret_origin, ret_dest) = route
+                        
+                        def update_progress(current, total, message):
+                            overall_progress = (route_idx * len(combinations) + current) / total_searches
+                            progress_bar.progress(overall_progress)
+                            status_text.text(f"[{route_label}] {message} ({route_idx + 1}/{len(airport_routes)} routes)")
+                        
+                        results = batch_search.search_date_range_multi_city(
+                            origin_destination_pairs=[(out_origin, out_dest), (ret_origin, ret_dest)],
+                            date_combinations=combinations,
+                            adults=params['adults'],
+                            progress_callback=update_progress
+                        )
+                        
+                        # Add route info to each result
+                        for result in results:
+                            result.origin = out_origin
+                            result.destination = out_dest
+                            result.search_route = route_label
+                            result.is_open_jaw = route_info['is_open_jaw']
+                        
+                        all_results.extend(results)
+                else:
+                    # Normal mode: Use standard batch search
+                    for route_idx, (origin, destination) in enumerate(airport_routes):
+                        route_label = f"{origin}→{destination}"
+                        
+                        def update_progress(current, total, message):
+                            overall_progress = (route_idx * len(combinations) + current) / total_searches
+                            progress_bar.progress(overall_progress)
+                            status_text.text(f"[{route_label}] {message} ({route_idx + 1}/{len(airport_routes)} routes)")
+                        
+                        results = batch_search.search_date_range(
+                            origin=origin,
+                            destination=destination,
+                            date_combinations=combinations,
+                            adults=params['adults'],
+                            progress_callback=update_progress
+                        )
+                        
+                        # Add route info to each result
+                        for result in results:
+                            result.origin = origin
+                            result.destination = destination
+                        
+                        all_results.extend(results)
                 
                 progress_bar.progress(1.0)
                 status_text.text(f"✅ Completed all {len(airport_routes)} routes!")

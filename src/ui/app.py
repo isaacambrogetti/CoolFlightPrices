@@ -1405,7 +1405,6 @@ def main():
                 help="Search for flights where you return from/to different airports. "
                      "Example: ZRH→LIS outbound, OPO→ZRH return. Requires roundtrip booking!"
             )
-            st.write(f"🔍 DEBUG (checkbox): allow_open_jaw set to {allow_open_jaw}")
             
             if allow_open_jaw:
                 st.info(
@@ -1470,10 +1469,6 @@ def main():
         st.session_state.last_allow_open_jaw = allow_open_jaw if multi_airport else False
         
         # Generate route combinations based on search mode
-        # DEBUG: Check open-jaw condition
-        st.write(f"🔍 DEBUG: allow_open_jaw={allow_open_jaw}, multi_airport={multi_airport}, return_date={return_date}, search_mode={search_mode}")
-        st.write(f"🔍 DEBUG: Condition result: {allow_open_jaw and multi_airport and return_date}")
-        
         if allow_open_jaw and multi_airport and return_date:
             # Open-jaw mode: Generate all permutations of (origin→dest, dest2→origin2)
             # where dest2 can be any destination airport and origin2 can be any origin airport
@@ -1530,7 +1525,11 @@ def main():
                     st.subheader(f"📊 Flexible Date Search: {origins[0]} → {destinations[0]}")
                 else:
                     st.subheader(f"📊 Flexible Date Search: {len(origins)} origin(s) × {len(destinations)} destination(s)")
-                    st.caption(f"Comparing: {', '.join([f'{o}→{d}' for o, d in airport_routes])}")
+                    # Handle both open-jaw (dict) and normal (tuple) formats
+                    if isinstance(airport_routes[0], dict):
+                        st.caption(f"Comparing: {', '.join([r['label'] for r in airport_routes])}")
+                    else:
+                        st.caption(f"Comparing: {', '.join([f'{o}→{d}' for o, d in airport_routes])}")
                 
                 # Generate date combinations
                 if params['use_sampling']:
@@ -1787,7 +1786,11 @@ def main():
                 st.subheader(f"📊 Flexible Date Search: {origins[0]} → {destinations[0]}")
             else:
                 st.subheader(f"📊 Flexible Date Search: {len(origins)} origin(s) × {len(destinations)} destination(s)")
-                st.caption(f"Comparing: {', '.join([f'{o}→{d}' for o, d in airport_routes])}")
+                # Handle both open-jaw (dict) and normal (tuple) formats
+                if isinstance(airport_routes[0], dict):
+                    st.caption(f"Comparing: {', '.join([r['label'] for r in airport_routes])}")
+                else:
+                    st.caption(f"Comparing: {', '.join([f'{o}→{d}' for o, d in airport_routes])}")
             
             st.info("✅ Showing previous search results. Change search criteria and click search to update.")
             display_date_range_results(all_results, None, None, params.get('duration_mode'))
@@ -1809,7 +1812,11 @@ def main():
                 """)
             else:
                 st.subheader(f"Search Results: {len(airport_routes)} Route(s)")
-                st.caption(f"Comparing: {', '.join([f'{o}→{d}' for o, d in airport_routes])}")
+                # Handle both open-jaw (dict) and normal (tuple) formats
+                if isinstance(airport_routes[0], dict):
+                    st.caption(f"Comparing: {', '.join([r['label'] for r in airport_routes])}")
+                else:
+                    st.caption(f"Comparing: {', '.join([f'{o}→{d}' for o, d in airport_routes])}")
             
             st.info("✅ Showing previous search results. Change search criteria and click search to update.")
             

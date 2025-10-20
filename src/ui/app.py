@@ -833,6 +833,60 @@ def display_multi_airport_results(flights, airport_routes):
     with col4:
         st.metric("Most Expensive", f"{currency} {max(prices):.2f}" if prices else "N/A")
     
+    # Top 5 Best Deals (moved before visualizations)
+    st.subheader("🏆 Top 5 Best Deals")
+    
+    sorted_flights = sorted(flights, key=lambda f: f['price'])[:5]
+    
+    for i, flight in enumerate(sorted_flights, 1):
+        route = flight.get('search_route', 'Unknown')
+        
+        # Build route description with return flight
+        outbound_route = f"{flight['outbound']['origin']}→{flight['outbound']['destination']}"
+        if flight.get('return'):
+            return_route = f"{flight['return']['origin']}→{flight['return']['destination']}"
+            route_display = f"{outbound_route} / {return_route}"
+        else:
+            route_display = outbound_route
+        
+        with st.expander(
+            f"#{i}: {flight['currency']} {flight['price']:.2f} - {route_display} [{route}]"
+            f"{' (Cheapest!)' if i == 1 else ''}",
+            expanded=(i <= 2)
+        ):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**✈️ Outbound Flight**")
+                outbound = flight['outbound']
+                st.markdown(f"""
+                - **Route:** {outbound['origin']} → {outbound['destination']}<br>
+                - **Date:** {outbound['departure_date']}<br>
+                - **Departure:** {outbound['departure_time']}<br>
+                - **Arrival:** {outbound['arrival_time']}<br>
+                - **Airline:** {get_airline_logo_html(outbound['airline'])}{outbound['flight_number']}<br>
+                - **Stops:** {outbound['stops']}<br>
+                - **Duration:** {outbound['duration']}<br>
+                """, unsafe_allow_html=True)
+            if flight['return']:
+                with col2:
+                    st.markdown("**🔙 Return Flight**")
+                    return_flight = flight['return']
+                    st.markdown(f"""
+                    - **Route:** {return_flight['origin']} → {return_flight['destination']}<br>
+                    - **Date:** {return_flight['departure_date']}<br>
+                    - **Departure:** {return_flight['departure_time']}<br>
+                    - **Arrival:** {return_flight['arrival_time']}<br>
+                    - **Airline:** {get_airline_logo_html(return_flight['airline'])}{return_flight['flight_number']}<br>
+                    - **Stops:** {return_flight['stops']}<br>
+                    - **Duration:** {return_flight['duration']}<br>
+                    """, unsafe_allow_html=True)
+            st.markdown(f"**Seats Available:** {flight['number_of_bookable_seats']}")
+            
+            # Add track price button
+            st.markdown("---")
+            display_track_button(flight, f"multi_{i}")
+    
     # Visualizations for multi-airport comparison
     st.subheader("📊 Route Comparison Analysis")
     
@@ -989,53 +1043,6 @@ def display_multi_airport_results(flights, airport_routes):
             st.caption("💡 Compare which airlines are cheapest for each route")
         except Exception as e:
             st.error(f"Error creating airline comparison: {str(e)}")
-    
-    # Top 5 Best Deals
-    st.subheader("🏆 Top 5 Best Deals")
-    
-    sorted_flights = sorted(flights, key=lambda f: f['price'])[:5]
-    
-    for i, flight in enumerate(sorted_flights, 1):
-        route = flight.get('search_route', 'Unknown')
-        
-        with st.expander(
-            f"#{i}: {flight['currency']} {flight['price']:.2f} - [{route}] "
-            f"{flight['outbound']['airline']} {flight['outbound']['flight_number']}"
-            f"{' (Cheapest!)' if i == 1 else ''}",
-            expanded=(i <= 2)
-        ):
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("**✈️ Outbound Flight**")
-                outbound = flight['outbound']
-                st.markdown(f"""
-                - **Route:** {outbound['origin']} → {outbound['destination']}<br>
-                - **Date:** {outbound['departure_date']}<br>
-                - **Departure:** {outbound['departure_time']}<br>
-                - **Arrival:** {outbound['arrival_time']}<br>
-                - **Airline:** {get_airline_logo_html(outbound['airline'])}{outbound['flight_number']}<br>
-                - **Stops:** {outbound['stops']}<br>
-                - **Duration:** {outbound['duration']}<br>
-                """, unsafe_allow_html=True)
-            if flight['return']:
-                with col2:
-                    st.markdown("**🔙 Return Flight**")
-                    return_flight = flight['return']
-                    st.markdown(f"""
-                    - **Route:** {return_flight['origin']} → {return_flight['destination']}<br>
-                    - **Date:** {return_flight['departure_date']}<br>
-                    - **Departure:** {return_flight['departure_time']}<br>
-                    - **Arrival:** {return_flight['arrival_time']}<br>
-                    - **Airline:** {get_airline_logo_html(return_flight['airline'])}{return_flight['flight_number']}<br>
-                    - **Stops:** {return_flight['stops']}<br>
-                    - **Duration:** {return_flight['duration']}<br>
-                    """, unsafe_allow_html=True)
-            st.markdown(f"**Seats Available:** {flight['number_of_bookable_seats']}")
-            
-            # Add track price button
-            st.markdown("---")
-            display_track_button(flight, f"multi_{i}")
     
     # Full results table
     with st.expander("📋 View All Flights"):
@@ -1427,9 +1434,14 @@ def main():
         st.session_state.last_allow_open_jaw = allow_open_jaw if multi_airport else False
         
         # Generate route combinations based on search mode
+        # DEBUG: Check open-jaw condition
+        if allow_open_jaw:
+            st.write(f"🔍 DEBUG: allow_open_jaw={allow_open_jaw}, multi_airport={multi_airport}, return_date={return_date}")
+        
         if allow_open_jaw and multi_airport and return_date:
             # Open-jaw mode: Generate all permutations of (origin→dest, dest2→origin2)
             # where dest2 can be any destination airport and origin2 can be any origin airport
+            st.info(f"✅ Generating {len(origins)}×{len(destinations)} open-jaw route combinations...")
             open_jaw_routes = []
             for out_origin in origins:
                 for out_dest in destinations:
@@ -1607,7 +1619,11 @@ def main():
                     """)
                 else:
                     st.subheader(f"Search Results: {len(airport_routes)} Route(s)")
-                    st.caption(f"Comparing: {', '.join([f'{o}→{d}' for o, d in airport_routes])}")
+                    # Handle both open-jaw (dict) and normal (tuple) formats
+                    if isinstance(airport_routes[0], dict):
+                        st.caption(f"Comparing: {', '.join([r['label'] for r in airport_routes])}")
+                    else:
+                        st.caption(f"Comparing: {', '.join([f'{o}→{d}' for o, d in airport_routes])}")
                 
                 # Show time filter info if applied
                 if any([dep_min_hour, dep_max_hour, arr_min_hour, arr_max_hour]):
